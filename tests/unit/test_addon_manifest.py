@@ -105,3 +105,23 @@ def test_plugin_wires_the_bridge() -> None:
     source = (ADDON_DIR / "godot_mcp.gd").read_text()
     assert "MCPBridge" in source, "plugin must start the bridge"
     assert "_bridge.stop()" in source, "plugin must stop the bridge on _exit_tree"
+
+
+def test_inspection_helpers_exist() -> None:
+    coerce = ADDON_DIR / "type_coerce.gd"
+    inspect = ADDON_DIR / "scene_inspect.gd"
+    assert coerce.is_file() and "class_name MCPTypeCoerce" in coerce.read_text()
+    assert inspect.is_file() and "class_name MCPSceneInspect" in inspect.read_text()
+
+
+def test_router_registers_inspection_commands() -> None:
+    source = (ADDON_DIR / "command_router.gd").read_text()
+    # Wire commands are cmd_-prefixed (the handler name); see docs/architecture.md.
+    for command in (
+        "cmd_get_project_info",
+        "cmd_get_active_scene",
+        "cmd_get_scene_tree",
+        "cmd_get_selected_node",
+        "cmd_get_node_properties",
+    ):
+        assert f'"{command}"' in source, f"router must register {command}"
