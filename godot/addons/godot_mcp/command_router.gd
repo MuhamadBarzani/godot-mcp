@@ -127,6 +127,12 @@ func _init() -> void:
 	_handlers["cmd_stop_scene"] = _cmd_stop_scene
 	_handlers["cmd_is_playing"] = _cmd_is_playing
 	_handlers["cmd_get_game_scene_tree"] = _cmd_get_game_scene_tree
+	# Input simulation (issue #36) — synthesize input against the running game.
+	_handlers["cmd_simulate_key"] = _cmd_simulate_key
+	_handlers["cmd_simulate_mouse"] = _cmd_simulate_mouse
+	_handlers["cmd_simulate_action"] = _cmd_simulate_action
+	_handlers["cmd_play_input_sequence"] = _cmd_play_input_sequence
+	_handlers["cmd_get_input_stats"] = _cmd_get_input_stats
 
 
 ## Dispatch one envelope ({ id, command, params }) and return a response envelope.
@@ -2110,6 +2116,93 @@ func _cmd_get_game_scene_tree(_params: Dictionary) -> Dictionary:
 	var tree: Variant = _debugger.get_cached_scene_tree()
 	_debugger.request_scene_tree()  # refresh the cache for the next call
 	return _ok({"playing": true, "connected": true, "tree": tree})
+
+
+func _cmd_simulate_key(params: Dictionary) -> Dictionary:
+	var guard := _require_live_probe()
+	if not guard["ok"]:
+		return guard
+	if str(params.get("key", "")).is_empty():
+		return _fail("VALIDATION_ERROR", "'key' must be a non-empty key name.")
+	_debugger.send_to_probe("godot_mcp:simulate_key", [params])
+	return _ok({"sent": true, "kind": "key", "count": 1})
+
+
+const _SIM_MOUSE_BUTTONS := ["left", "right", "middle", "wheel_up", "wheel_down"]
+
+
+func _cmd_simulate_mouse(params: Dictionary) -> Dictionary:
+	var guard := _require_live_probe()
+	if not guard["ok"]:
+		return guard
+	var button := str(params.get("button", ""))
+	if not _valid_mouse_button(button):
+		return _fail("VALIDATION_ERROR", "'button' must be empty (motion) or one of %s." % str(_SIM_MOUSE_BUTTONS))
+	_debugger.send_to_probe("godot_mcp:simulate_mouse", [params])
+	return _ok({"sent": true, "kind": "mouse", "count": 1})
+
+
+## A mouse button name is valid when empty (motion) or a known button.
+func _valid_mouse_button(name: String) -> bool:
+	return name.is_empty() or name in _SIM_MOUSE_BUTTONS
+
+
+func _cmd_simulate_action(params: Dictionary) -> Dictionary:
+	var guard := _require_live_probe()
+	if not guard["ok"]:
+		return guard
+	if str(params.get("action", "")).is_empty():
+		return _fail("VALIDATION_ERROR", "'action' must be a non-empty action name.")
+	_debugger.send_to_probe("godot_mcp:simulate_action", [params])
+	return _ok({"sent": true, "kind": "action", "count": 1})
+
+
+func _cmd_play_input_sequence(params: Dictionary) -> Dictionary:
+	var guard := _require_live_probe()
+	if not guard["ok"]:
+		return guard
+	var events: Variant = params.get("events")
+	if not (events is Array) or (events as Array).is_empty():
+		return _fail("VALIDATION_ERROR", "'events' must be a non-empty array.")
+	# Validate each event's shape/type up front so the returned count is reliable and a
+	# malformed event can't be silently skipped by the probe.
+	for i in (events as Array).size():
+		var bad := _invalid_input_event(events[i])
+		if not bad.is_empty():
+			return _fail("VALIDATION_ERROR", "events[%d]: %s" % [i, bad])
+	_debugger.send_to_probe("godot_mcp:play_input_sequence", [params])
+	return _ok({"sent": true, "kind": "sequence", "count": (events as Array).size()})
+
+
+## Return a reason string if an input-sequence event is malformed, else "" (valid).
+func _invalid_input_event(event: Variant) -> String:
+	if not (event is Dictionary):
+		return "must be an object"
+	match str(event.get("type", "")):
+		"key":
+			return "" if not str(event.get("key", "")).is_empty() else "'key' is required"
+		"action":
+			return "" if not str(event.get("action", "")).is_empty() else "'action' is required"
+		"mouse":
+			return "" if _valid_mouse_button(str(event.get("button", ""))) else "invalid 'button'"
+		_:
+			return "'type' must be key/mouse/action"
+
+
+func _cmd_get_input_stats(_params: Dictionary) -> Dictionary:
+	var playing := EditorInterface.is_playing_scene()
+	var connected: bool = _debugger != null and _debugger.is_connected_to_probe()
+	var injected: int = _debugger.get_input_acks() if connected else 0
+	return _ok({"playing": playing, "connected": connected, "injected": injected})
+
+
+## Guard for input injection: a play session must be live with its probe connected.
+func _require_live_probe() -> Dictionary:
+	if not EditorInterface.is_playing_scene():
+		return _fail("PRECONDITION_FAILED", "No play session. Run play_scene first.", "play_session")
+	if _debugger == null or not _debugger.is_connected_to_probe():
+		return _fail("PRECONDITION_FAILED", "The godot_mcp runtime probe is not connected; add it as an autoload in the game.", "runtime_probe")
+	return {"ok": true}
 
 
 # --- editor screenshots (issue #33) ----------------------------------------
