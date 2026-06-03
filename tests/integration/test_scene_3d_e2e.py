@@ -22,7 +22,6 @@ pytestmark = pytest.mark.skipif(GODOT_BIN is None, reason="Godot binary not inst
 
 BRIDGE_URL = "ws://localhost:9080"
 SCRATCH = "res://tmp_e2e_scene_3d.tscn"
-SCRATCH_FILE = GODOT_PROJECT / "tmp_e2e_scene_3d.tscn"
 MESH = "res://tmp_e2e_box.tres"
 MESHLIB = "res://tmp_e2e_meshlib.tres"
 MESHLIB_FILE = GODOT_PROJECT / "tmp_e2e_meshlib.tres"

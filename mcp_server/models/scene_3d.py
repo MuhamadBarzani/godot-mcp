@@ -45,7 +45,7 @@ class MeshLibraryResult(BaseModel):
 
     node_path: str = ""
     library_path: str = ""
-    created: bool = True
+    created: bool = False
     dry_run: bool = False
 
 
