@@ -1,4 +1,10 @@
-"""End-to-end 3D scene test against a live editor (issue #40)."""
+"""End-to-end 3D scene test against a live editor (issues #40, #83).
+
+Covers mesh/camera/light/environment + GridMap guards, then the MeshLibrary authoring
+chain from #83 (create_mesh_library → add_mesh_library_item) — which finally lets
+gridmap_set_cell place a real item. Primitive meshes need no asset; a BoxMesh saved as
+a ``.tres`` exercises the ``mesh_path`` + file-backed-library path.
+"""
 
 from __future__ import annotations
 
@@ -16,7 +22,18 @@ pytestmark = pytest.mark.skipif(GODOT_BIN is None, reason="Godot binary not inst
 
 BRIDGE_URL = "ws://localhost:9080"
 SCRATCH = "res://tmp_e2e_scene_3d.tscn"
-SCRATCH_FILE = GODOT_PROJECT / "tmp_e2e_scene_3d.tscn"
+MESH = "res://tmp_e2e_box.tres"
+MESHLIB = "res://tmp_e2e_meshlib.tres"
+MESHLIB_FILE = GODOT_PROJECT / "tmp_e2e_meshlib.tres"
+# Scene + .tres resources and their Godot 4.4 .uid sidecars, all cleaned up after the run.
+_ARTIFACTS = [
+    "tmp_e2e_scene_3d.tscn",
+    "tmp_e2e_scene_3d.tscn.uid",
+    "tmp_e2e_box.tres",
+    "tmp_e2e_box.tres.uid",
+    "tmp_e2e_meshlib.tres",
+    "tmp_e2e_meshlib.tres.uid",
+]
 
 
 async def _ok(bridge: Bridge, command: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -125,6 +142,60 @@ async def _run() -> None:
             "cmd_gridmap_set_cell", {"node_path": "Grid", "position": [0, 0], "item": 0}
         )
         assert bad_pos.ok is False and bad_pos.error == "VALIDATION_ERROR"
+
+        # --- MeshLibrary authoring (issue #83): build a library and place a REAL cell ---
+        # node-backed: create the library on the GridMap, add primitive items
+        lib = await _ok(bridge, "cmd_create_mesh_library", {"node_path": "Grid"})
+        assert lib["created"] is True
+        item0 = await _ok(
+            bridge,
+            "cmd_add_mesh_library_item",
+            {"node_path": "Grid", "mesh_type": "BoxMesh", "name": "Block"},
+        )
+        assert item0["item_id"] == 0 and item0["name"] == "Block"
+        # a second item auto-advances the id — proof item 0 was registered in the library
+        item1 = await _ok(
+            bridge, "cmd_add_mesh_library_item", {"node_path": "Grid", "mesh_type": "SphereMesh"}
+        )
+        assert item1["item_id"] == 1
+        # reusing an existing id is rejected (further proof the item persisted)
+        dup = await bridge.send(
+            "cmd_add_mesh_library_item",
+            {"node_path": "Grid", "mesh_type": "BoxMesh", "item_id": 0},
+        )
+        assert dup.ok is False and dup.error == "VALIDATION_ERROR"
+        # the payoff: gridmap_set_cell now succeeds against a real library + item
+        placed = await _ok(
+            bridge, "cmd_gridmap_set_cell", {"node_path": "Grid", "position": [1, 0, 1], "item": 0}
+        )
+        assert placed["item"] == 0
+
+        # file-backed: a MeshLibrary saved as .tres, item sourced from a Mesh .tres
+        await _ok(bridge, "cmd_create_resource", {"type": "BoxMesh", "resource_path": MESH})
+        saved = await _ok(bridge, "cmd_create_mesh_library", {"save_path": MESHLIB})
+        assert saved["library_path"] == MESHLIB and MESHLIB_FILE.exists()
+        fitem = await _ok(
+            bridge,
+            "cmd_add_mesh_library_item",
+            {"library_path": MESHLIB, "mesh_path": MESH, "name": "Crate"},
+        )
+        assert fitem["item_id"] == 0 and fitem["mesh_path"] == MESH
+
+        # validation: ambiguous target, ambiguous mesh source, and a non-Mesh mesh_path
+        both_t = await bridge.send(
+            "cmd_add_mesh_library_item",
+            {"node_path": "Grid", "library_path": MESHLIB, "mesh_type": "BoxMesh"},
+        )
+        assert both_t.ok is False and both_t.error == "VALIDATION_ERROR"
+        both_m = await bridge.send(
+            "cmd_add_mesh_library_item",
+            {"node_path": "Grid", "mesh_type": "BoxMesh", "mesh_path": MESH},
+        )
+        assert both_m.ok is False and both_m.error == "VALIDATION_ERROR"
+        not_mesh = await bridge.send(
+            "cmd_add_mesh_library_item", {"library_path": MESHLIB, "mesh_path": MESHLIB}
+        )
+        assert not_mesh.ok is False and not_mesh.error == "VALIDATION_ERROR"
     finally:
         await bridge.close()
 
@@ -144,4 +215,5 @@ def test_live_scene_3d() -> None:
             editor.wait(timeout=10)
         except subprocess.TimeoutExpired:
             editor.kill()
-        SCRATCH_FILE.unlink(missing_ok=True)
+        for artifact in _ARTIFACTS:
+            (GODOT_PROJECT / artifact).unlink(missing_ok=True)

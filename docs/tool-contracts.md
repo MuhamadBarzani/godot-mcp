@@ -270,6 +270,27 @@ configured from `properties` (background_mode, ambient_light_color, …). `gridm
 requires a `GridMap` with a `mesh_library` (else a structured `mesh_library` precondition);
 a negative `item` clears the cell.
 
+#### MeshLibrary authoring (issue #83) — category: `scene_3d` (gated off by default)
+
+Build the MeshLibrary that `gridmap_set_cell` references — without one, a GridMap has
+nothing to place. Target a MeshLibrary by `node_path` (an in-scene GridMap,
+UndoRedo-wrapped) or `library_path` (a saved `.tres`, re-saved via ResourceSaver). All
+`mutating`, `dry_run`.
+
+| Tool | Params | Returns |
+|------|--------|---------|
+| `create_mesh_library` | `node_path="", save_path=""` | `MeshLibraryResult { node_path, library_path, created }` |
+| `add_mesh_library_item` | `node_path="", library_path="", mesh_type="", mesh_path="", item_id?, name="", properties?` | `MeshLibraryItemResult { node_path, library_path, item_id, name, mesh_type, mesh_path }` |
+
+Typical chain: `create_mesh_library` (assign to a GridMap and/or save a `.tres`) →
+`add_mesh_library_item` (returns the `item_id`) → `gridmap_set_cell` with that `item_id`.
+For `create_mesh_library` pass at least one of `node_path`/`save_path` (combinable). For
+`add_mesh_library_item` pass exactly one target (`node_path`|`library_path`) and exactly
+one mesh source: `mesh_type` (a primitive like BoxMesh, configured via `properties` — no
+asset needed, good for greyboxing) or `mesh_path` (an imported Mesh resource
+`.tres`/`.res`/`.obj`; `.glb`/`.gltf` import as scenes, not meshes). `item_id` overrides
+the auto-assigned id.
+
 #### Particles (issue #42) — category: `particles` (gated off by default)
 
 Create and configure GPU particle systems — generic Godot, pass the node type names.
