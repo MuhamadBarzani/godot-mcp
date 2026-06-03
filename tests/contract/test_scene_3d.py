@@ -55,6 +55,27 @@ def _responder(cmd: CommandEnvelope) -> ResponseEnvelope | None:
                 cmd.id,
                 {"node_path": p["node_path"], "position": p["position"], "item": p["item"]},
             )
+        case "cmd_create_mesh_library":
+            return ResponseEnvelope.success(
+                cmd.id,
+                {
+                    "node_path": p.get("node_path", ""),
+                    "library_path": p.get("save_path", ""),
+                    "created": True,
+                },
+            )
+        case "cmd_add_mesh_library_item":
+            return ResponseEnvelope.success(
+                cmd.id,
+                {
+                    "node_path": p.get("node_path", ""),
+                    "library_path": p.get("library_path", ""),
+                    "item_id": 0,
+                    "name": p.get("name", ""),
+                    "mesh_type": p.get("mesh_type", ""),
+                    "mesh_path": p.get("mesh_path", ""),
+                },
+            )
     return ResponseEnvelope.failure(cmd.id, "VALIDATION_ERROR", "unexpected")
 
 
@@ -144,6 +165,61 @@ async def test_gridmap_missing_library_preserves_required() -> None:
         )
     assert result.is_error
     assert "mesh_library" in str(result.content)
+
+
+async def test_mesh_library_authoring_chain() -> None:
+    # Build a MeshLibrary on a GridMap, add an item from a primitive mesh — the
+    # prerequisite that lets gridmap_set_cell place a real item.
+    server, _ = _build()
+    async with Client(server) as client:
+        await client.call_tool("enable_toolset", {"category": "scene_3d"})
+        tools = {t.name: t for t in await client.list_tools()}
+        authoring = {"create_mesh_library", "add_mesh_library_item"}
+        assert authoring <= set(tools)
+        assert all(tools[n].meta["safety_class"] == "mutating" for n in authoring)
+        lib = await client.call_tool("create_mesh_library", {"node_path": "Grid"})
+        item = await client.call_tool(
+            "add_mesh_library_item",
+            {"node_path": "Grid", "mesh_type": "BoxMesh", "name": "Wall"},
+        )
+    assert lib.structured_content["created"] is True
+    assert item.structured_content["item_id"] == 0
+    assert item.structured_content["mesh_type"] == "BoxMesh"
+    assert item.structured_content["name"] == "Wall"
+
+
+async def test_mesh_library_target_and_mesh_source_are_exclusive() -> None:
+    server, conn = _build()
+    async with Client(server) as client:
+        await client.call_tool("enable_toolset", {"category": "scene_3d"})
+        both_targets = await client.call_tool(
+            "add_mesh_library_item",
+            {"node_path": "Grid", "library_path": "res://l.tres", "mesh_type": "BoxMesh"},
+            raise_on_error=False,
+        )
+        both_meshes = await client.call_tool(
+            "add_mesh_library_item",
+            {"node_path": "Grid", "mesh_type": "BoxMesh", "mesh_path": "res://m.tres"},
+            raise_on_error=False,
+        )
+        neither_target = await client.call_tool(
+            "create_mesh_library", {}, raise_on_error=False
+        )
+    assert both_targets.is_error and "only one" in str(both_targets.content)
+    assert both_meshes.is_error
+    assert neither_target.is_error
+    assert "cmd_add_mesh_library_item" not in _commands(conn)
+
+
+async def test_mesh_library_save_dry_run_sends_no_command() -> None:
+    server, conn = _build()
+    async with Client(server) as client:
+        await client.call_tool("enable_toolset", {"category": "scene_3d"})
+        dry = await client.call_tool(
+            "create_mesh_library", {"save_path": "res://blocks.tres", "dry_run": True}
+        )
+    assert dry.structured_content["dry_run"] is True
+    assert "cmd_create_mesh_library" not in _commands(conn)
 
 
 async def test_dry_run_sends_no_mutation() -> None:

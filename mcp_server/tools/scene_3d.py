@@ -20,11 +20,48 @@ from mcp_server.models.scene_3d import (
     GridMapCellResult,
     LightResult,
     MeshInstanceResult,
+    MeshLibraryItemResult,
+    MeshLibraryResult,
 )
-from mcp_server.safety import MUTATING, enforce_preconditions, require_node_exists
+from mcp_server.safety import (
+    MUTATING,
+    PreconditionError,
+    enforce_preconditions,
+    require_node_exists,
+)
 from mcp_server.tools._route import route
 
 SCENE_3D = {SCENE_3D_TAG}
+
+
+def _require_single_library_target(node_path: str, library_path: str) -> None:
+    """A MeshLibrary is targeted by exactly one of an in-scene GridMap or a saved
+    ``.tres``; reject both-set (ambiguous backing) and neither-set."""
+    if node_path and library_path:
+        raise PreconditionError(
+            "Pass only one of 'node_path' or 'library_path', not both.",
+            required="single_library_target",
+        )
+    if not node_path and not library_path:
+        raise PreconditionError(
+            "Provide 'node_path' (a GridMap) or 'library_path' (a .tres).",
+            required="node_path_or_library_path",
+        )
+
+
+def _require_single_mesh_source(mesh_type: str, mesh_path: str) -> None:
+    """An item's mesh comes from exactly one of a primitive ``mesh_type`` or a
+    ``mesh_path`` Mesh resource."""
+    if mesh_type and mesh_path:
+        raise PreconditionError(
+            "Pass only one of 'mesh_type' or 'mesh_path', not both.",
+            required="single_mesh_source",
+        )
+    if not mesh_type and not mesh_path:
+        raise PreconditionError(
+            "Provide 'mesh_type' (a primitive like BoxMesh) or 'mesh_path' (a Mesh resource).",
+            required="mesh_type_or_mesh_path",
+        )
 
 
 def register_scene_3d(mcp: FastMCP, bridge: Bridge) -> None:
@@ -150,3 +187,74 @@ def register_scene_3d(mcp: FastMCP, bridge: Bridge) -> None:
             "orientation": orientation,
         }
         return GridMapCellResult(**await route(bridge, "cmd_gridmap_set_cell", params))
+
+    @mcp.tool(meta=MUTATING, tags=SCENE_3D)
+    @enforce_preconditions
+    async def create_mesh_library(
+        node_path: str = "",
+        save_path: str = "",
+        dry_run: bool = False,
+    ) -> MeshLibraryResult:
+        """Create a new MeshLibrary resource — the prerequisite for placing cells with
+        gridmap_set_cell. Assign it to a GridMap via ``node_path`` and/or persist it as a
+        ``.tres`` via ``save_path`` (a ``res://`` path); pass at least one. Next add items
+        with add_mesh_library_item.
+        """
+        if not node_path and not save_path:
+            raise PreconditionError(
+                "Provide 'node_path' to assign the MeshLibrary and/or 'save_path' to save it.",
+                required="node_path_or_save_path",
+            )
+        if node_path:
+            await require_node_exists(bridge, node_path)
+        if dry_run:
+            return MeshLibraryResult(node_path=node_path, library_path=save_path, dry_run=True)
+        params = {"node_path": node_path, "save_path": save_path}
+        return MeshLibraryResult(**await route(bridge, "cmd_create_mesh_library", params))
+
+    @mcp.tool(meta=MUTATING, tags=SCENE_3D)
+    @enforce_preconditions
+    async def add_mesh_library_item(
+        node_path: str = "",
+        library_path: str = "",
+        mesh_type: str = "",
+        mesh_path: str = "",
+        item_id: int | None = None,
+        name: str = "",
+        properties: dict[str, Any] | None = None,
+        dry_run: bool = False,
+    ) -> MeshLibraryItemResult:
+        """Add an item to a MeshLibrary and return its ``item_id`` (used by
+        gridmap_set_cell). Target the MeshLibrary by ``node_path`` (an in-scene GridMap)
+        or ``library_path`` (a saved ``.tres``); pass exactly one. The item's mesh comes
+        from exactly one of ``mesh_type`` (a primitive like BoxMesh, configured with
+        ``properties`` such as ``size``) or ``mesh_path`` (the path to an imported Mesh
+        resource — ``.tres``/``.res``/``.obj``; note ``.glb``/``.gltf`` import as scenes,
+        not meshes). ``item_id`` overrides the auto-assigned id; ``name`` labels the item.
+        """
+        _require_single_library_target(node_path, library_path)
+        _require_single_mesh_source(mesh_type, mesh_path)
+        if node_path:
+            await require_node_exists(bridge, node_path)
+        if dry_run:
+            return MeshLibraryItemResult(
+                node_path=node_path,
+                library_path=library_path,
+                item_id=item_id if item_id is not None else -1,
+                name=name,
+                mesh_type=mesh_type,
+                mesh_path=mesh_path,
+                dry_run=True,
+            )
+        params = {
+            "node_path": node_path,
+            "library_path": library_path,
+            "mesh_type": mesh_type,
+            "mesh_path": mesh_path,
+            "item_id": item_id,
+            "name": name,
+            "properties": properties or {},
+        }
+        return MeshLibraryItemResult(
+            **await route(bridge, "cmd_add_mesh_library_item", params)
+        )
