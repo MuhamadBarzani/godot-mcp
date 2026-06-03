@@ -26,9 +26,10 @@ SCRATCH_FILE = GODOT_PROJECT / "tmp_e2e_scene_3d.tscn"
 MESH = "res://tmp_e2e_box.tres"
 MESHLIB = "res://tmp_e2e_meshlib.tres"
 MESHLIB_FILE = GODOT_PROJECT / "tmp_e2e_meshlib.tres"
-# .tres resources + their Godot 4.4 .uid sidecars, all cleaned up after the run.
+# Scene + .tres resources and their Godot 4.4 .uid sidecars, all cleaned up after the run.
 _ARTIFACTS = [
     "tmp_e2e_scene_3d.tscn",
+    "tmp_e2e_scene_3d.tscn.uid",
     "tmp_e2e_box.tres",
     "tmp_e2e_box.tres.uid",
     "tmp_e2e_meshlib.tres",
