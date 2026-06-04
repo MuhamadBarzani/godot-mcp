@@ -12,6 +12,7 @@ All editor work + UndoRedo lives in the addon; all safety lives here
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
@@ -191,7 +192,10 @@ def register_mutation(mcp: FastMCP, bridge: Bridge) -> None:
         await require_active_scene(bridge)
         await require_node_exists(bridge, parent_path)
         if dry_run:
-            preview = name if parent_path in (".", "") else f"{parent_path}/{name}"
+            # Deterministic fallback: use scene file name (without extension) when name is empty,
+            # matching what the addon creates by default.
+            _name = name or Path(scene_path).stem
+            preview = _name if parent_path in (".", "") else f"{parent_path}/{_name}"
             return InstanceSceneResult(
                 node_path=preview, scene_path=scene_path, instanced=False, dry_run=True
             )

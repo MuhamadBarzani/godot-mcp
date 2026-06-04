@@ -3357,32 +3357,32 @@ func _cmd_select_nodes(params: Dictionary) -> Dictionary:
 
 
 func _cmd_instance_scene(params: Dictionary) -> Dictionary:
-    var root := EditorInterface.get_edited_scene_root()
-    if root == null:
-        return _fail("PRECONDITION_FAILED", "No scene is open.", "active_scene")
-    var parent_path := str(params.get("parent_path", "."))
-    var parent: Node = root.get_node_or_null(NodePath(parent_path))
-    if parent == null:
-        return _fail("RESOURCE_NOT_FOUND", "No node at '%s'." % parent_path)
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null:
+		return _fail("PRECONDITION_FAILED", "No scene is open.", "active_scene")
+	var parent_path := str(params.get("parent_path", "."))
+	var parent: Node = root.get_node_or_null(NodePath(parent_path))
+	if parent == null:
+		return _fail("RESOURCE_NOT_FOUND", "No node at '%s'." % parent_path)
 
-    var scene_path := str(params.get("scene_path", ""))
-    if not FileAccess.file_exists(scene_path):
-        return _fail("RESOURCE_NOT_FOUND", "No scene at '%s'." % scene_path)
-    var packed: PackedScene = load(scene_path)
-    if packed == null:
-        return _fail("VALIDATION_ERROR", "Failed to load PackedScene from '%s'." % scene_path)
+	var scene_path := str(params.get("scene_path", ""))
+	if not FileAccess.file_exists(scene_path):
+		return _fail("RESOURCE_NOT_FOUND", "No scene at '%s'." % scene_path)
+	var packed: PackedScene = load(scene_path)
+	if packed == null:
+		return _fail("VALIDATION_ERROR", "Failed to load PackedScene from '%s'." % scene_path)
 
-    var instance: Node = packed.instantiate()
-    var custom_name := str(params.get("name", ""))
-    if not custom_name.is_empty():
-        instance.name = custom_name
-    var ur := EditorInterface.get_editor_undo_redo()
-    ur.create_action("Instance %s" % scene_path.get_file())
-    ur.add_do_method(parent, "add_child", instance)
-    ur.add_do_method(instance, "set_owner", root)
-    ur.add_do_reference(instance)
-    ur.add_undo_method(parent, "remove_child", instance)
-    ur.commit_action()
+	var instance: Node = packed.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
+	var custom_name := str(params.get("name", ""))
+	if not custom_name.is_empty():
+		instance.name = custom_name
+	var ur := EditorInterface.get_editor_undo_redo()
+	ur.create_action("Instance %s" % scene_path.get_file())
+	ur.add_do_method(parent, "add_child", instance)
+	ur.add_do_method(instance, "set_owner", root)
+	ur.add_do_reference(instance)
+	ur.add_undo_method(parent, "remove_child", instance)
+	ur.commit_action()
 	return _ok({"node_path": Inspect.relative_path(instance, root), "scene_path": scene_path, "instanced": true})
 
 
@@ -3413,6 +3413,11 @@ func _cmd_remove_input_action(params: Dictionary) -> Dictionary:
 		return _fail("RESOURCE_NOT_FOUND", "No input action '%s'." % action_name)
 	ProjectSettings.set_setting(setting_key, null)
 	ProjectSettings.save()
+	# Clear runtime InputMap state so the editor session stays consistent.
+	if InputMap.has_action(action_name):
+		for ev in InputMap.action_get_events(action_name):
+			InputMap.action_erase_event(action_name, ev)
+		InputMap.erase_action(action_name)
 	return _ok({"name": action_name, "removed": true})
 
 
@@ -3481,7 +3486,7 @@ func _cmd_add_input_event(params: Dictionary) -> Dictionary:
 	ProjectSettings.save()
 	# InputMap reflects runtime state; update the runtime action too.
 	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name, deadzone if "deadzone" in action_data else 0.5)
+		InputMap.add_action(action_name, action_data["deadzone"] if "deadzone" in action_data else 0.5)
 	InputMap.action_add_event(action_name, ev)
 	return _ok({"action": action_name, "event_index": events.size() - 1, "added": true})
 
