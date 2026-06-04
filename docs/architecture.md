@@ -186,3 +186,21 @@ property samples, find-UI, input injection, performance monitors).
 `ping` → `pong` is the canonical liveness probe and the first contract test (issue #3).
 The server's `health_check` tool (issue #4) reports server version plus bridge connection
 state, built on this probe.
+
+## MCP surface capabilities (auto-discovery)
+
+The server exposes its full surface through multiple MCP protocol features so agents can
+discover capabilities without hard-coding knowledge:
+
+- **Server instructions** — sent automatically on every MCP client connect. Explains the
+toolset gating protocol, common toolsets, docs URLs, and prompt names.
+- **`experimental_capabilities.godot_mcp`** — structured metadata in the server init handshake
+with version, min_godot, toolset_count, docs URIs, prompt names, and resource URIs.
+- **Prompts** — `@mcp.prompt()` workflow templates (toolset_discovery, build_scene,
+play_test, script_edit, debug_scene, troubleshoot). Discoverable via `list_prompts()`,
+renderable via `render_prompt()`.
+- **Resources** — `godot://project/info`, `godot://scene/current`, `godot://scene/tree`,
+`godot://node/selected`. Read-only snapshots refreshed on access.
+- **`get_server_info`** — a single `core` tool that returns everything: toolset summaries
+with per-category tool counts, prompt/resource lists, bridge state, active scene, 8 common
+errors with fixes, and suggested next steps.
