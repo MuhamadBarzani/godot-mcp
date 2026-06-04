@@ -19,10 +19,32 @@ from mcp_server.models.envelope import CommandEnvelope, ResponseEnvelope
 Responder = Callable[[CommandEnvelope], ResponseEnvelope | None]
 
 
-def ping_responder(command: CommandEnvelope) -> ResponseEnvelope | None:
-    """Default addon behaviour: answer ``cmd_ping`` with ``{pong: true}``."""
+def _default_base_responder(
+    command: CommandEnvelope, *, godot_version: str = "4.4.1-stable"
+) -> ResponseEnvelope | None:
+    """Handle commands every fake should support so the server can bootstrap."""
     if command.command == "cmd_ping":
         return ResponseEnvelope.success(command.id, {"pong": True})
+    if command.command == "cmd_get_project_info":
+        return ResponseEnvelope.success(
+            command.id,
+            {
+                "name": "TestProject",
+                "godot_version": godot_version,
+                "main_scene": "res://main.tscn",
+                "project_path": "/tmp/test_project",
+                "autoloads": {},
+                "input_actions": [],
+            },
+        )
+    return None
+
+
+def ping_responder(command: CommandEnvelope) -> ResponseEnvelope | None:
+    """Default addon behaviour: answer ``cmd_ping`` with ``{pong: true}``."""
+    base = _default_base_responder(command)
+    if base is not None:
+        return base
     return ResponseEnvelope.failure(
         command.id, "VALIDATION_ERROR", f"Unknown command '{command.command}'."
     )
@@ -46,6 +68,18 @@ class FakeAddonConnection:
         self.sent.append(message)
         command = CommandEnvelope.model_validate_json(message)
         response = self._responder(command)
+        # Auto-respond to bootstrap commands the custom responder explicitly
+        # doesn't know (VALIDATION_ERROR / "Unknown command"), so tests don't
+        # have to repeat cmd_ping / cmd_get_project_info in every responder.
+        if (
+            response is not None
+            and not response.ok
+            and response.error == "VALIDATION_ERROR"
+            and command.command in ("cmd_ping", "cmd_get_project_info")
+        ):
+            base = _default_base_responder(command)
+            if base is not None:
+                response = base
         if response is not None:
             await self._incoming.put(response.model_dump_json())
 

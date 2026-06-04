@@ -6,6 +6,9 @@ underlying transport and envelope are in [`architecture.md`](architecture.md); t
 rules are [`../.claude/rules/mcp-tools.md`](../.claude/rules/mcp-tools.md) and
 [`../.claude/rules/error-handling.md`](../.claude/rules/error-handling.md).
 
+> **For user-facing setup instructions, see [`README.md`](../README.md).** This document is the
+> authoritative per-tool reference for implementers and agents.
+
 > Scope note: concrete tools land from issue #5 onward. This document fixes the *shape*
 > every tool/resource/prompt must take. Add each concrete contract here as it is built.
 
