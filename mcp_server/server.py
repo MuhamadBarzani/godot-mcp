@@ -22,12 +22,14 @@ from mcp_server.config import ServerConfig
 from mcp_server.resources.context import register_resources
 from mcp_server.runtime import GodotRunner, Runner
 from mcp_server.safety import register_safety_tools
+from mcp_server.diagnostics import register_diagnostics
 from mcp_server.tools.analysis import register_analysis
 from mcp_server.tools.animation import register_animation
 from mcp_server.tools.audio import register_audio
 from mcp_server.tools.batch import register_batch
 from mcp_server.tools.editor import register_editor
 from mcp_server.tools.export import register_export
+from mcp_server.tools.debug_workflow import register_debug_workflow
 from mcp_server.tools.health import register_health
 from mcp_server.tools.input_map import register_input_map
 from mcp_server.tools.input_sim import register_input_sim
@@ -51,6 +53,7 @@ from mcp_server.tools.testing import register_testing
 from mcp_server.tools.theme_ui import register_theme_ui
 from mcp_server.tools.tilemap import register_tilemap
 from mcp_server.toolsets import ToolsetManager, register_toolset_tools
+from mcp_server.prompts import register_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +89,65 @@ def create_server(
         finally:
             await bridge.close()
 
-    mcp = FastMCP(SERVER_NAME, lifespan=lifespan)
+    mcp = FastMCP(
+        SERVER_NAME,
+        lifespan=lifespan,
+        instructions=(
+            "You are connected to a godot-mcp server that gates its tools into categories "
+            "called 'toolsets'. Only 'core' (diagnostics, toolset management) and "
+            "'inspection' (read-only project/scene/node reading) are enabled by default. "
+            "Every other capability is hidden until you explicitly enable it.\n\n"
+            "MANDATORY PROTOCOL:\n"
+            "1. Call get_server_info() for a full capability snapshot (toolsets, bridge state, troubleshooting).\n"
+            "2. Call list_toolsets() to see what is available and which are enabled.\n"
+            "3. Call enable_toolset(category) for every category you plan to use.\n"
+            "4. Only after enabling can you call the tools in that category.\n\n"
+            "Common toolsets you will need:\n"
+            "- scene_edit  → create_node, set_node_property, attach_script, save_scene\n"
+            "- scripts     → write_script, read_script, get_parse_errors\n"
+            "- runtime     → run_and_capture (headless), play_scene (editor)\n"
+            "- input       → simulate_action, simulate_key, play_input_sequence\n"
+            "- testing     → assert_node_state, run_test_scenario\n"
+            "- batch       → batch_set_property, find_nodes_by_type\n"
+            "- physics     → setup_physics_body, setup_collision\n"
+            "- resources_edit → register_autoload, create_resource\n\n"
+            "DOCUMENTATION:\n"
+            "- Tutorial (prompt-driven walkthrough): https://github.com/hybridindie/godot-mcp/blob/main/TUTORIAL.md\n"
+            "- Tool contracts (per-tool spec): https://github.com/hybridindie/godot-mcp/blob/main/docs/tool-contracts.md\n"
+            "- Architecture (bridge contract): https://github.com/hybridindie/godot-mcp/blob/main/docs/architecture.md\n\n"
+            "If you try to call a tool and get 'ToolError: unknown tool', the toolset "
+            "is not enabled. Call enable_toolset first.\n\n"
+            "This server exposes workflow prompts (toolset_discovery, build_scene, "
+            "play_test, script_edit) and a diagnostics tool (get_server_info) that "
+            "returns tool counts, bridge state, active scene, and common errors with fixes."
+        ),
+        website_url="https://github.com/hybridindie/godot-mcp",
+        experimental_capabilities={
+            "godot_mcp": {
+                "version": "2026.06.01",
+                "min_godot": "4.4",
+                "toolset_count": 23,
+                "docs": {
+                    "tutorial": "https://github.com/hybridindie/godot-mcp/blob/main/TUTORIAL.md",
+                    "tool_contracts": "https://github.com/hybridindie/godot-mcp/blob/main/docs/tool-contracts.md",
+                    "architecture": "https://github.com/hybridindie/godot-mcp/blob/main/docs/architecture.md",
+                },
+                "prompts": [
+                    "toolset_discovery",
+                    "build_scene",
+                    "play_test",
+                    "script_edit",
+                ],
+                "resources": [
+                    "godot://project/info",
+                    "godot://scene/current",
+                    "godot://scene/tree",
+                    "godot://scene/tree/{max_depth}",
+                    "godot://node/selected",
+                ],
+            }
+        },
+    )
     register_health(mcp, bridge, config)
     register_inspection(mcp, bridge)
     register_mutation(mcp, bridge)
@@ -116,6 +177,7 @@ def create_server(
     register_analysis(mcp, bridge, config)
     register_export(mcp, bridge, config, runner)
     register_scripts(mcp, bridge, config, runner)
+    register_debug_workflow(mcp, bridge, config, runner)
     register_safety_tools(mcp)
 
     # Gate the tool surface by category, then apply the default exposure (core +
@@ -123,4 +185,11 @@ def create_server(
     manager = ToolsetManager(mcp, bridge=bridge)
     register_toolset_tools(mcp, manager)
     manager.apply_defaults()
+
+    # Comprehensive diagnostics: toolset counts, bridge state, troubleshooting.
+    register_diagnostics(mcp, bridge, config, manager)
+
+    # Register workflow prompts (instruction templates for the agent).
+    register_prompts(mcp)
+
     return mcp
