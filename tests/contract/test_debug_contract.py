@@ -63,7 +63,15 @@ def test_debug_scene_prompt_content(server) -> None:
 
 def test_debug_scene_prompt_parameterized(server) -> None:
     """The debug_scene prompt accepts scene_path and script_path."""
-    result = asyncio.run(_render_prompt(server, "debug_scene", {"scene_path": "res://level.tscn", "script_path": "res://scripts/hero.gd"}))
+    result = asyncio.run(
+        _render_prompt(
+            server, "debug_scene",
+            {
+                "scene_path": "res://level.tscn",
+                "script_path": "res://scripts/hero.gd",
+            },
+        )
+    )
     content = " ".join(str(m.content) for m in result.messages)
     assert "res://level.tscn" in content
     assert "res://scripts/hero.gd" in content

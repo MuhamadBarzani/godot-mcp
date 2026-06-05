@@ -57,7 +57,12 @@ def test_toolset_discovery_prompt_returns_messages(server) -> None:
 
 def test_build_scene_prompt_parameterized(server) -> None:
     """The build_scene prompt accepts scene_path and root_type arguments."""
-    result = asyncio.run(_render_prompt(server, "build_scene", {"scene_path": "res://level.tscn", "root_type": "Node3D"}))
+    result = asyncio.run(
+        _render_prompt(
+            server, "build_scene",
+            {"scene_path": "res://level.tscn", "root_type": "Node3D"},
+        )
+    )
     assert result is not None
     content = " ".join(str(m.content) for m in result.messages)
     assert "res://level.tscn" in content
@@ -76,7 +81,15 @@ def test_play_test_prompt_parameterized(server) -> None:
 
 def test_script_edit_prompt_parameterized(server) -> None:
     """The script_edit prompt accepts script_path and node_path arguments."""
-    result = asyncio.run(_render_prompt(server, "script_edit", {"script_path": "res://scripts/hero.gd", "node_path": "./Hero"}))
+    result = asyncio.run(
+        _render_prompt(
+            server, "script_edit",
+            {
+                "script_path": "res://scripts/hero.gd",
+                "node_path": "./Hero",
+            },
+        )
+    )
     assert result is not None
     content = " ".join(str(m.content) for m in result.messages)
     assert "res://scripts/hero.gd" in content
