@@ -19,17 +19,18 @@ from fastmcp import FastMCP
 
 from mcp_server.bridge import Bridge
 from mcp_server.config import ServerConfig
+from mcp_server.diagnostics import register_diagnostics
+from mcp_server.prompts import register_prompts
 from mcp_server.resources.context import register_resources
 from mcp_server.runtime import GodotRunner, Runner
 from mcp_server.safety import register_safety_tools
-from mcp_server.diagnostics import register_diagnostics
 from mcp_server.tools.analysis import register_analysis
 from mcp_server.tools.animation import register_animation
 from mcp_server.tools.audio import register_audio
 from mcp_server.tools.batch import register_batch
+from mcp_server.tools.debug_workflow import register_debug_workflow
 from mcp_server.tools.editor import register_editor
 from mcp_server.tools.export import register_export
-from mcp_server.tools.debug_workflow import register_debug_workflow
 from mcp_server.tools.health import register_health
 from mcp_server.tools.input_map import register_input_map
 from mcp_server.tools.input_sim import register_input_sim
@@ -53,7 +54,6 @@ from mcp_server.tools.testing import register_testing
 from mcp_server.tools.theme_ui import register_theme_ui
 from mcp_server.tools.tilemap import register_tilemap
 from mcp_server.toolsets import ToolsetManager, register_toolset_tools
-from mcp_server.prompts import register_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,8 @@ def create_server(
             "'inspection' (read-only project/scene/node reading) are enabled by default. "
             "Every other capability is hidden until you explicitly enable it.\n\n"
             "MANDATORY PROTOCOL:\n"
-            "1. Call get_server_info() for a full capability snapshot (toolsets, bridge state, troubleshooting).\n"
+            "1. Call get_server_info() for a full capability snapshot "
+            "(toolsets, bridge state, troubleshooting).\n"
             "2. Call list_toolsets() to see what is available and which are enabled.\n"
             "3. Call enable_toolset(category) for every category you plan to use.\n"
             "4. Only after enabling can you call the tools in that category.\n\n"

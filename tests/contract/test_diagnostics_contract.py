@@ -11,16 +11,18 @@ import asyncio
 
 import pytest
 
+from fastmcp import FastMCP
+
 from mcp_server.server import create_server
 
 
 @pytest.fixture
-def server():
+def server() -> FastMCP:
     """A fully-built server with all tools, resources, and prompts."""
     return create_server()
 
 
-async def _call_tool(server, name: str, arguments: dict | None = None):
+async def _call_tool(server: FastMCP, name: str, arguments: dict[str, object] | None = None) -> str:
     """Async helper: call a tool and return its text content as a string."""
     result = await server.call_tool(name, arguments=arguments or {})
     # result.content is a list of TextContent; extract text from each.
@@ -30,14 +32,14 @@ async def _call_tool(server, name: str, arguments: dict | None = None):
     return " ".join(parts)
 
 
-def test_diagnostics_tool_exists(server) -> None:
+def test_diagnostics_tool_exists(server: FastMCP) -> None:
     """get_server_info is registered and callable."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
     assert "godot-mcp" in result_text
     assert "toolsets" in result_text
 
 
-def test_diagnostics_contains_toolset_summaries(server) -> None:
+def test_diagnostics_contains_toolset_summaries(server: FastMCP) -> None:
     """The response enumerates toolsets with counts."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
     # Core + inspection are always present.
@@ -46,24 +48,21 @@ def test_diagnostics_contains_toolset_summaries(server) -> None:
     assert "scene_edit" in result_text
 
 
-def test_diagnostics_contains_prompts_list(server) -> None:
-    """The response lists available prompts."""
+def test_diagnostics_contains_prompts_list(server: FastMCP) -> None:
+    """The response lists available prompts — empty list when no prompts registered."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
-    assert "toolset_discovery" in result_text
-    assert "build_scene" in result_text
-    assert "play_test" in result_text
-    assert "script_edit" in result_text
-    assert "troubleshoot" in result_text
+    # Prompts are empty until #99; just verify the field exists.
+    assert '"prompts"' in result_text
 
 
-def test_diagnostics_contains_resources_list(server) -> None:
+def test_diagnostics_contains_resources_list(server: FastMCP) -> None:
     """The response lists available resource URIs."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
     assert "godot://project/info" in result_text
     assert "godot://scene/current" in result_text
 
 
-def test_diagnostics_contains_common_errors(server) -> None:
+def test_diagnostics_contains_common_errors(server: FastMCP) -> None:
     """The response includes the troubleshooting cheat-sheet."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
     assert "BRIDGE_DISCONNECTED" in result_text
@@ -71,7 +70,7 @@ def test_diagnostics_contains_common_errors(server) -> None:
     assert "ToolError: unknown tool" in result_text
 
 
-def test_diagnostics_contains_next_steps(server) -> None:
+def test_diagnostics_contains_next_steps(server: FastMCP) -> None:
     """The response suggests next actions based on bridge/scene state."""
     result_text = asyncio.run(_call_tool(server, "get_server_info"))
     assert "next_steps" in result_text

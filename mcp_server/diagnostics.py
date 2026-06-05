@@ -11,11 +11,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from fastmcp import FastMCP
+
 from mcp_server import __version__
 from mcp_server.bridge import Bridge
 from mcp_server.categories import CORE_TAG
 from mcp_server.config import ServerConfig
 from mcp_server.safety import READ_ONLY
+from mcp_server.toolsets import ToolsetManager
 
 
 class ToolsetSummary(BaseModel):
@@ -58,7 +61,7 @@ class ServerDiagnostics(BaseModel):
     next_steps: list[str]
 
 
-def _count_tools_by_tag(mcp, tag: str) -> int:
+def _count_tools_by_tag(mcp: FastMCP, tag: str) -> int:
     """Count registered tools carrying a given category tag."""
     count = 0
     # Tools are stored in the local provider's _components dict under 'tool:{name}@' keys.
@@ -71,7 +74,7 @@ def _count_tools_by_tag(mcp, tag: str) -> int:
     return count
 
 
-def _list_prompts(mcp) -> list[str]:
+def _list_prompts(mcp: FastMCP) -> list[str]:
     """Return names of all registered prompts."""
     names: list[str] = []
     components = getattr(getattr(mcp, "_local_provider", None), "_components", {})
@@ -84,7 +87,7 @@ def _list_prompts(mcp) -> list[str]:
     return names
 
 
-def _list_resources(mcp) -> list[str]:
+def _list_resources(mcp: FastMCP) -> list[str]:
     """Return URIs of all registered resources."""
     uris: list[str] = []
     components = getattr(getattr(mcp, "_local_provider", None), "_components", {})
@@ -144,12 +147,13 @@ COMMON_ERRORS: list[dict[str, str]] = [
     {
         "symptom": "ToolError: unknown tool",
         "cause": "The toolset containing that tool is not enabled.",
-        "fix": "Call enable_toolset('scene_edit') [or the relevant category] before using the tool.",
+        "fix": "Call enable_toolset(\"scene_edit\") "
+        "or the relevant category before using the tool.",
     },
     {
         "symptom": "BRIDGE_DISCONNECTED",
         "cause": "Godot is not running or the addon is not enabled.",
-        "fix": "Open Godot with the project, go to Project Settings → Plugins → godot_mcp → Enable.",
+        "fix": "Open Godot with the project and enable the addon in Project Settings.",
     },
     {
         "symptom": "PRECONDITION_FAILED: required=active_scene",
@@ -169,7 +173,7 @@ COMMON_ERRORS: list[dict[str, str]] = [
     {
         "symptom": "PRECONDITION_FAILED: required=runtime_probe",
         "cause": "The game was launched from the editor but lacks the MCPRuntimeProbe autoload.",
-        "fix": "Add res://addons/godot_mcp/mcp_runtime_probe.gd as an autoload in Project Settings.",
+        "fix": "Register MCPRuntimeProbe as an autoload in Project Settings.",
     },
     {
         "symptom": "PRECONDITION_FAILED: required=godot_version",
@@ -179,12 +183,12 @@ COMMON_ERRORS: list[dict[str, str]] = [
     {
         "symptom": "RESOURCE_NOT_FOUND",
         "cause": "A node, scene, script, or resource path does not exist.",
-        "fix": "Verify the path with get_scene_tree() or get_filesystem_tree() before referencing it.",
+        "fix": "Verify the path with get_scene_tree() or get_filesystem_tree() first.",
     },
 ]
 
 
-def _build_toolset_summaries(mcp, manager) -> list[ToolsetSummary]:
+def _build_toolset_summaries(mcp: FastMCP, manager: ToolsetManager) -> list[ToolsetSummary]:
     """Build summaries with live tool counts for every known toolset."""
     summaries: list[ToolsetSummary] = []
     for info in manager.status():
@@ -209,22 +213,28 @@ def _next_steps(bridge_connected: bool, active_scene: str | None) -> list[str]:
             "The addon lives at godot/addons/godot_mcp/."
         )
         return steps
-    steps.append("Bridge is online. Call list_toolsets() then enable_toolset(...) for the work you plan to do.")
+    steps.append(
+        "Bridge is online. Call list_toolsets() then enable_toolset(...) "
+        "for the work you plan to do."
+    )
     if active_scene is None:
         steps.append("No scene is open. Open or create a scene before editing nodes.")
     else:
         steps.append(f"Active scene: {active_scene}. Ready for scene editing.")
-    steps.append("For live testing, ensure MCPRuntimeProbe autoload is registered, then play_scene().")
+    steps.append(
+        "For live testing, register MCPRuntimeProbe as an autoload, "
+        "then play_scene()."
+    )
     return steps
 
 
 # -- registration -----------------------------------------------------------
 
 def register_diagnostics(
-    mcp,
+    mcp: FastMCP,
     bridge: Bridge,
     config: ServerConfig,
-    manager,
+    manager: ToolsetManager,
 ) -> None:
     """Register the get_server_info diagnostics tool."""
 
