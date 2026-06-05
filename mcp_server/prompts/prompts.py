@@ -317,8 +317,8 @@ def _register_troubleshoot(mcp: FastMCP) -> None:
                 content=(
                     "Something went wrong. Follow this diagnostic checklist in order.\n\n"
                     "STEP 1 — Check server health:\n"
-                    "  health_check()\n"
-                    "  → Look at 'bridge.connected' and 'server.version'.\n\n"
+                    "  get_server_info()\n"
+                    "  → Look at 'bridge.connected', 'active_scene', and 'next_steps'.\n\n"
                     "STEP 2 — If bridge is disconnected:\n"
                     "  - Godot must be running with the addon enabled.\n"
                     "  - Check Project Settings → Plugins → godot_mcp → Enable.\n"
