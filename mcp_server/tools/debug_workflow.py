@@ -8,14 +8,16 @@ everything" debug primitive.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastmcp import FastMCP
 
 from mcp_server.bridge import Bridge
 from mcp_server.categories import CORE_TAG
 from mcp_server.config import ServerConfig
 from mcp_server.models.debug_workflow import DebugWorkflowResult
-from mcp_server.models.scripts import ParseCheckResult, ParseError
-from mcp_server.runtime import GodotRunner, Runner, summarize_run
+from mcp_server.models.scripts import ParseError
+from mcp_server.runtime import Runner, summarize_run
 from mcp_server.safety import READ_ONLY
 from mcp_server.tools._route import route
 
@@ -53,12 +55,18 @@ def register_debug_workflow(
                 from mcp_server.tools.scripts import parse_check_errors
                 project_dir = await resolve_project_dir(bridge, config)
                 # List scripts via bridge
-                scripts_response = await route(bridge, "cmd_list_scripts", {"directory": "res://"})
-                if scripts_response.ok:
+                scripts_response = await bridge.send(
+                    "cmd_list_scripts", {"directory": "res://"}
+                )
+                if scripts_response.ok and scripts_response.result:
                     for script_path in scripts_response.result.get("scripts", []):
                         try:
-                            output = await runner.check_script(project_dir, script_path, timeout=15.0)
-                            errs = parse_check_errors(output.stdout + "\n" + output.stderr)
+                            output = await runner.check_script(
+                                project_dir, script_path, timeout=15.0,
+                            )
+                            errs = parse_check_errors(
+                                output.stdout + "\n" + output.stderr
+                            )
                             parse_errors.extend(errs)
                         except Exception:
                             # Skip individual scripts that fail to check
@@ -72,8 +80,8 @@ def register_debug_workflow(
         tree_result = None
         try:
             tree_response = await route(bridge, "cmd_get_scene_tree", {"max_depth": -1})
-            if tree_response.ok:
-                tree_result = tree_response.result
+            if tree_response:
+                tree_result = tree_response
         except Exception:
             pass
 
@@ -87,7 +95,9 @@ def register_debug_workflow(
             try:
                 from mcp_server.runtime import resolve_project_dir
                 project_dir = await resolve_project_dir(bridge, config)
-                output = await runner.run(project_dir, scene or None, float(timeout_seconds))
+                output = await runner.run(
+                    project_dir, scene or None, float(timeout_seconds),
+                )
                 run_result = summarize_run(output)
             except Exception as exc:
                 # If we can't resolve project dir (no editor, no env var), report it.
@@ -95,16 +105,16 @@ def register_debug_workflow(
                 findings.append(f"HEADLESS RUN SKIPPED: {exc}")
 
         # 4. Bridge / project info
-        bridge_info = {"connected": bridge.connected}
+        bridge_info: dict[str, Any] = {"connected": bridge.connected}
         try:
             info_response = await route(bridge, "cmd_get_project_info")
-            if info_response.ok:
+            if info_response:
                 bridge_info = {
                     "connected": True,
-                    "godot_version": info_response.result.get("godot_version"),
-                    "project_name": info_response.result.get("name"),
-                    "main_scene": info_response.result.get("main_scene"),
-                    "autoloads": info_response.result.get("autoloads"),
+                    "godot_version": info_response.get("godot_version"),
+                    "project_name": info_response.get("name"),
+                    "main_scene": info_response.get("main_scene"),
+                    "autoloads": info_response.get("autoloads"),
                 }
         except Exception:
             pass
@@ -112,7 +122,8 @@ def register_debug_workflow(
         if not bridge.connected:
             findings.append("BRIDGE DISCONNECTED: Godot editor is not reachable.")
             suggestions.append(
-                "Open Godot with the addon enabled (Project Settings → Plugins → godot_mcp → Enable)."
+                "Open Godot with the addon enabled\n"
+                "(Project Settings → Plugins → godot_mcp → Enable)."
             )
 
         if tree_result is None or not tree_result.get("tree"):
@@ -122,12 +133,14 @@ def register_debug_workflow(
         if run_result:
             if run_result.errors:
                 findings.append(
-                    f"RUNTIME ERRORS: {len(run_result.errors)} error(s) captured during headless run."
+                    "RUNTIME ERRORS: "
+                    f"{len(run_result.errors)} error(s) captured "
+                    "during headless run."
                 )
-                for e in run_result.errors[:3]:
+                for err in run_result.errors[:3]:
                     suggestions.append(
-                        f"  [{e.type.upper()}] {e.message}"
-                        + (f" at {e.source}:{e.line}" if e.source else "")
+                        f"  [{err.type.upper()}] {err.message}"
+                        + (f" at {err.source}:{err.line}" if err.source else "")
                     )
             if run_result.warnings:
                 findings.append(
@@ -139,16 +152,19 @@ def register_debug_workflow(
                     "Check for infinite loops in _process/_physics_process or missing quit() calls."
                 )
             if run_result.exit_code != 0:
-                findings.append(f"NON-ZERO EXIT: headless run exited with code {run_result.exit_code}.")
+                findings.append(
+                    "NON-ZERO EXIT: headless run exited with "
+                    f"code {run_result.exit_code}."
+                )
 
         if parse_errors:
             findings.append(
                 f"PARSE ERRORS: {len(parse_errors)} script(s) failed parse check."
             )
-            for e in parse_errors[:3]:
+            for pe in parse_errors[:3]:
                 suggestions.append(
-                    f"  [PARSE] {e.message}"
-                    + (f" at {e.source}:{e.line}" if e.source else "")
+                    f"  [PARSE] {pe.message}"
+                    + (f" at {pe.source}:{pe.line}" if pe.source else "")
                 )
         elif parse_skipped:
             findings.append(f"PARSE CHECK SKIPPED: {parse_skipped}")
