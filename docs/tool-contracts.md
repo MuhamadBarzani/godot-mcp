@@ -676,6 +676,17 @@ internal `request_id` (constant across its poll), so the addon dispatches exactl
 full-Control scan per call and never returns a prior identical-filter request's stale
 result. The `rect` pairs with `simulate_mouse` to click located UI.
 
+### Diagnostics & debug workflow — `read_only` (category: `core`)
+
+| Tool | Params | Returns | Notes |
+|------|--------|---------|-------|
+| `get_server_info` | — | `ServerDiagnostics { server, version, transport, toolsets[], prompts[], resources[], bridge{}, active_scene?, common_errors[], next_steps[] }` | capability snapshot — call first |
+| `debug_workflow` | `scene="", timeout_seconds=5.0` | `DebugWorkflowResult { bridge{}, scene_tree?, run?, parse{ok, errors[], skipped_reason}, findings[], suggestions[] }` | one-call comprehensive check |
+
+`get_server_info` returns the full server surface so an agent can discover everything in one call: toolset summaries with counts, registered prompt names, resource URIs, bridge state, active scene, common errors with fixes, and suggested next steps.
+
+`debug_workflow` aggregates multiple read-only checks — parse errors across all `.gd` files, active scene tree, headless run capture, and bridge state — into a unified report with actionable findings and suggestions.
+
 #### Safety introspection (issue #14) — `read_only`
 
 | Tool | Params | Returns |
@@ -735,6 +746,19 @@ separate game project.
 - Arguments are typed and documented.
 - Prompts here stay **game-agnostic** — generic Godot workflows (e.g. "create a scene with
   a typed root", "wire a signal"). Game-specific prompts belong to the separate game project.
+
+### Implemented prompts
+
+| Prompt | Arguments | What it instructs |
+|--------|-----------|-------------------|
+| `toolset_discovery` | — | How to discover and enable gated toolsets at session start |
+| `build_scene` | `scene_path`, `root_type` | Scaffold a new scene: enable toolsets, create/open scene, add nodes, attach scripts, add collision |
+| `play_test` | `scene_path` | Live editor play-test: enable runtime, play scene, inspect tree, simulate input, assert state |
+| `script_edit` | `script_path`, `node_path` | Write, attach, and verify a script: write_script → attach_script → get_parse_errors |
+| `debug_scene` | `scene_path`, `script_path` | Systematic debugging: debug_workflow, get_parse_errors, run_and_capture, analyze_signal_flow, find_unused_resources, detect_circular_dependencies |
+| `troubleshoot` | `error_message`, `scene_path`, `script_path` | Interpret a specific error message, find the source, and suggest fixes |
+
+Prompts are discoverable via `list_prompts()` and renderable via `render_prompt(name, arguments={...})`.
 
 ## Client fallback
 

@@ -315,11 +315,12 @@ A typical agent session follows this pattern:
 
 **1. Discovery**
 ```
-list_toolsets          → see what's available
-get_project_info       → project name, Godot version, main scene, autoloads
-get_active_scene       → is a scene open? which one?
-get_scene_tree         → inspect the node hierarchy
-get_selected_node      → what the user is currently working on
+get_server_info          → capability snapshot: toolsets, bridge state, docs URLs
+list_toolsets            → see what's available
+get_project_info         → project name, Godot version, main scene, autoloads
+get_active_scene         → is a scene open? which one?
+get_scene_tree           → inspect the node hierarchy
+get_selected_node        → what the user is currently working on
 ```
 
 **2. Planning**
@@ -337,6 +338,9 @@ save_scene
 
 **4. Verification**
 ```
+debug_workflow(scene="res://main.tscn", timeout_seconds=10)
+→ returns parse errors, scene tree, run results, findings, and suggestions in one call
+
 run_and_capture(scene="res://main.tscn", timeout_seconds=10)
 → returns exit code, errors, warnings, output
 ```
@@ -413,6 +417,8 @@ The full surface is 121 tools across 23 categories. Below is a summary; the auth
 
 ### Core (always on)
 - `health_check` — server version + bridge state
+- `get_server_info` — full capability snapshot: toolsets, prompts, resources, bridge state, and common troubleshooting scenarios (call this first)
+- `debug_workflow` — one-call comprehensive debug check: parse errors, scene tree, headless run, and bridge state
 - `list_toolsets` / `enable_toolset` / `disable_toolset` — toolset management
 - `list_tools_by_safety_class` — safety introspection
 - `read_resource` — fallback for clients without resource protocol support
