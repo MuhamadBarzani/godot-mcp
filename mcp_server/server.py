@@ -119,15 +119,16 @@ def create_server(
             "If you try to call a tool and get 'ToolError: unknown tool', the toolset "
             "is not enabled. Call enable_toolset first.\n\n"
             "This server exposes workflow prompts (toolset_discovery, build_scene, "
-            "play_test, script_edit) and a diagnostics tool (get_server_info) that "
-            "returns tool counts, bridge state, active scene, and common errors with fixes."
+            "play_test, script_edit, debug_scene, troubleshoot) and a diagnostics tool "
+            "(get_server_info) that returns tool counts, bridge state, active scene, "
+            "and common errors with fixes."
         ),
         website_url="https://github.com/hybridindie/godot-mcp",
         experimental_capabilities={
             "godot_mcp": {
                 "version": "2026.06.01",
                 "min_godot": "4.4",
-                "toolset_count": 23,
+                "toolset_count": 24,
                 "docs": {
                     "tutorial": "https://github.com/hybridindie/godot-mcp/blob/main/TUTORIAL.md",
                     "tool_contracts": "https://github.com/hybridindie/godot-mcp/blob/main/docs/tool-contracts.md",
@@ -138,6 +139,8 @@ def create_server(
                     "build_scene",
                     "play_test",
                     "script_edit",
+                    "debug_scene",
+                    "troubleshoot",
                 ],
                 "resources": [
                     "godot://project/info",

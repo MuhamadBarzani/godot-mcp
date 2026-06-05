@@ -9,9 +9,8 @@ complete mental model.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from fastmcp import FastMCP
+from pydantic import BaseModel
 
 from mcp_server import __version__
 from mcp_server.bridge import Bridge

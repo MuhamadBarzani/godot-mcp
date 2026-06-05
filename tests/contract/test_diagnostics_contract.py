@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from fastmcp import FastMCP
 
 from mcp_server.server import create_server
