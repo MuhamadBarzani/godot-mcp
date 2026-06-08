@@ -21,6 +21,7 @@ var _ui_elements: Variant = null  # last godot_mcp:ui_elements payload (#35)
 var _ui_pending := "__none__"  # request_id of the in-flight find_ui request (#35)
 var _recorded_input: Variant = null  # last godot_mcp:recorded_input payload (#68)
 var _performance: Variant = null  # last godot_mcp:performance payload (#38)
+var _breakpoints: Array = []  # tracked breakpoints for issue #110
 
 
 func _has_capture(capture: String) -> bool:
@@ -150,3 +151,29 @@ func clear_recorded_input() -> void:
 
 func get_performance() -> Variant:
 	return _performance
+
+
+## Return the current session ID so handlers can call get_session().
+func get_session_id() -> int:
+	return _session_id
+
+
+## Track a breakpoint in our local list (issue #110).
+func track_breakpoint(path: String, line: int, enabled: bool) -> void:
+	# Remove any existing entry for this exact path+line.
+	for i in range(_breakpoints.size() - 1, -1, -1):
+		var bp: Dictionary = _breakpoints[i]
+		if str(bp.get("path", "")) == path and int(bp.get("line", 0)) == line:
+			_breakpoints.remove_at(i)
+	if enabled:
+		_breakpoints.append({"path": path, "line": line})
+
+
+## Return all currently tracked breakpoints.
+func get_tracked_breakpoints() -> Array:
+	return _breakpoints.duplicate()
+
+
+## Clear the tracked breakpoint list.
+func clear_tracked_breakpoints() -> void:
+	_breakpoints.clear()

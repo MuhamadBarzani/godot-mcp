@@ -26,6 +26,7 @@ from mcp_server.categories import (
     AUDIO_TAG,
     BATCH_TAG,
     CORE_TAG,
+    DEBUGGER_TAG,
     EDITOR_TAG,
     EXPORT_TAG,
     INPUT_MAP_TAG,
@@ -87,6 +88,8 @@ TOOLSETS: dict[str, str] = {
     "script dependencies, and scene-complexity stats.",
     EXPORT_TAG: "Drive the export pipeline: list presets, report export info, and run "
     "an export (needs export templates).",
+    DEBUGGER_TAG: "Debugger breakpoint control: set, remove, clear breakpoints and force "
+    "breaks in a running game (needs a play session).",
 }
 
 # Minimum Godot version (major, minor) per toolset. Categories omitted here work

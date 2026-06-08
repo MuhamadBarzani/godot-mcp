@@ -29,6 +29,7 @@ from mcp_server.tools.animation import register_animation
 from mcp_server.tools.audio import register_audio
 from mcp_server.tools.batch import register_batch
 from mcp_server.tools.debug_workflow import register_debug_workflow
+from mcp_server.tools.debugger import register_debugger
 from mcp_server.tools.editor import register_editor
 from mcp_server.tools.export import register_export
 from mcp_server.tools.health import register_health
@@ -128,7 +129,7 @@ def create_server(
             "godot_mcp": {
                 "version": "2026.06.01",
                 "min_godot": "4.4",
-                "toolset_count": 24,
+                "toolset_count": 25,
                 "docs": {
                     "tutorial": "https://github.com/hybridindie/godot-mcp/blob/main/TUTORIAL.md",
                     "tool_contracts": "https://github.com/hybridindie/godot-mcp/blob/main/docs/tool-contracts.md",
@@ -178,6 +179,7 @@ def create_server(
     register_testing(mcp, bridge)
     register_profiling(mcp, bridge)
     register_batch(mcp, bridge)
+    register_debugger(mcp, bridge)
     register_analysis(mcp, bridge, config)
     register_export(mcp, bridge, config, runner)
     register_scripts(mcp, bridge, config, runner)

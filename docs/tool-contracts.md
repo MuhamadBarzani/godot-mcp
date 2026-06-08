@@ -615,6 +615,19 @@ closed files). `get_dependencies` lists what a `res://` resource/scene depends o
 `{raw, path, type}` parsed from `ResourceLoader.get_dependencies`). `dry_run` on the writes
 returns the plan/counts without changing anything.
 
+#### Debugger breakpoint control (issue #110, Tier 1) — category: `debugger` (gated off by default)
+
+Set, remove, clear, and force breakpoints in a running editor play session. Requires an active play session; `force_break` additionally needs the godot-mcp runtime probe autoload. All are `runtime`.
+
+| Tool | Params | Returns |
+|------|--------|---------|
+| `set_breakpoint` | `path (res:// script), line` | `BreakpointResult { breakpoint_set, path, line }` |
+| `remove_breakpoint` | `path, line` | `BreakpointResult { breakpoint_removed, path, line }` |
+| `clear_breakpoints` | — | `ClearBreakpointsResult { breakpoints_cleared }` |
+| `force_break` | — | `ForceBreakResult { force_break_sent }` |
+
+`set_breakpoint` uses `EditorDebuggerSession.set_breakpoint(path, line, true)`; `remove_breakpoint` uses `set_breakpoint(path, line, false)`. `clear_breakpoints` clears on the game side via the probe (when connected) and removes any individually tracked breakpoints on the editor side. `force_break` sends `EngineDebugger.debug(true, false)` through the probe to trigger an immediate break.
+
 #### Profiling (issue #38) — category: `profiling` (gated off by default)
 
 Read Godot's `Performance` monitors. Both `read_only`.

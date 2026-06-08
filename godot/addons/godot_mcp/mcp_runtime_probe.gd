@@ -52,6 +52,12 @@ func _capture(message: String, data: Array) -> bool:
 		"get_performance":
 			EngineDebugger.send_message("godot_mcp:performance", [_performance_snapshot()])
 			return true
+		"clear_breakpoints":
+			EngineDebugger.clear_breakpoints()
+			return true
+		"force_break":
+			EngineDebugger.debug(true, false)
+			return true
 	return false
 
 

@@ -41,6 +41,7 @@ const MCPProjectFSHandlers := preload("res://addons/godot_mcp/handlers/project_f
 const MCPResourcesHandlers := preload("res://addons/godot_mcp/handlers/resources.gd")
 const MCPSceneSessionHandlers := preload("res://addons/godot_mcp/handlers/scene_session.gd")
 const MCPInputMapHandlers := preload("res://addons/godot_mcp/handlers/input_map.gd")
+const MCPDebuggerHandlers := preload("res://addons/godot_mcp/handlers/debugger.gd")
 
 var _handlers: Dictionary = {}
 # The EditorDebuggerPlugin that captures a played game's godot_mcp channel (issue #66).
@@ -73,6 +74,7 @@ var _project_fs: MCPProjectFSHandlers = null
 var _resources: MCPResourcesHandlers = null
 var _scene_session: MCPSceneSessionHandlers = null
 var _input_map: MCPInputMapHandlers = null
+var _debugger_handlers: MCPDebuggerHandlers = null
 
 
 ## Inject the MCPDebugger so runtime-inspection handlers can read cached live state.
@@ -139,6 +141,8 @@ func _init() -> void:
 	_scene_session.register(_handlers)
 	_input_map = MCPInputMapHandlers.new(self)
 	_input_map.register(_handlers)
+	_debugger_handlers = MCPDebuggerHandlers.new(self)
+	_debugger_handlers.register(_handlers)
 
 
 ## Dispatch one envelope ({ id, command, params }) and return a response envelope.
@@ -271,6 +275,17 @@ func _invalid_input_event(event: Variant) -> String:
 
 
 ## Guard for input injection: a play session must be live with its probe connected.
+## Guard for breakpoint operations: a play session must be live with a valid debug session.
+func _require_debug_session() -> Dictionary:
+	if not EditorInterface.is_playing_scene():
+		return _fail("PRECONDITION_FAILED", "No play session. Run play_scene first.", "play_session")
+	if _debugger == null:
+		return _fail("INTERNAL_ERROR", "Debugger plugin is unavailable.")
+	if _debugger.get_session_id() < 0:
+		return _fail("PRECONDITION_FAILED", "No active debug session. The game may not have connected to the editor debugger yet.", "play_session")
+	return {"ok": true}
+
+
 func _require_live_probe() -> Dictionary:
 	if not EditorInterface.is_playing_scene():
 		return _fail("PRECONDITION_FAILED", "No play session. Run play_scene first.", "play_session")
