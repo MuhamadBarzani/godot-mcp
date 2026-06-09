@@ -12,6 +12,7 @@
 [ext_resource type="Script" path="res://scripts/camera_follow.gd" id="10_camera"]
 [ext_resource type="Script" path="res://scripts/background.gd" id="12_background"]
 [ext_resource type="Script" path="res://scripts/game_over_screen.gd" id="13_gameover"]
+[ext_resource type="Script" path="res://scripts/debugger_demo.gd" id="14_debugger"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_player"]
 radius = 20.0
@@ -258,3 +259,6 @@ process_material = SubResource("ParticlesMaterial_blood")
 emitting = false
 amount = 10
 process_material = SubResource("ParticlesMaterial_xp")
+
+[node name="DebuggerDemo" type="Node2D" parent="."]
+script = ExtResource("14_debugger")

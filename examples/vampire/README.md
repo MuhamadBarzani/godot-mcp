@@ -12,6 +12,7 @@ A complete Vampire Survivors-style game for comprehensive MCP toolset testing.
 - **Particles**: Blood burst on enemy death, sparkle on XP pickup
 - **Audio**: (Placeholder — can be tested with MCP audio toolset)
 - **TileMap**: Grass tile background (placeholder asset)
+- **Debugger Demo**: A `DebuggerDemo` node with auto-ticking logic and a `breakpoint` on input — useful for demonstrating the MCP debugger tools (`get_stack_frames`, `evaluate_expression`, `step_into`, etc.)
 
 ## MCP Toolset Coverage
 
@@ -32,6 +33,7 @@ A complete Vampire Survivors-style game for comprehensive MCP toolset testing.
 | Signal connections | `scene_edit` |
 | Collision layers/masks | `physics` |
 | Pause/unpause via `get_tree().paused` | `runtime`, `scripts` |
+| **Debugger tools** (`set_breakpoint`, `step_into`, `evaluate_expression`, …) | `debugger` |
 
 ## Controls
 
@@ -41,6 +43,7 @@ A complete Vampire Survivors-style game for comprehensive MCP toolset testing.
 - **Area weapon**: Pulses damage around player every second
 - **Level up**: Choose upgrade from menu (pauses game)
 - **Death**: Shows score, wave, and time; click Restart
+- **Debugger Demo**: Press `Space` or click in the game window to trigger a built-in `breakpoint` in `DebuggerDemo` (use MCP `get_stack_frames` / `evaluate_expression` / `step_into` while paused)
 
 ## Project Structure
 
@@ -63,7 +66,8 @@ examples/vampire/
 │   ├── hud.gd               # Health/XP/score/wave/timer UI updates
 │   ├── upgrade_menu.gd      # Level-up menu with random options
 │   ├── camera_follow.gd     # Smooth follow camera
-│   └── game_over_screen.gd  # Restart button handler
+│   ├── game_over_screen.gd  # Restart button handler
+│   └── debugger_demo.gd     # Auto-tick node with breakpoint for debugger tool demo
 └── assets/
     └── (placeholder for textures/sprites)
 ```
@@ -78,9 +82,21 @@ To test this demo with godot-mcp:
 4. Try commands like: "Show me the scene tree", "Create an enemy", "Set player speed to 300",
    "Add a particle effect to the player", "Change the tilemap background color"
 
+### Debugger tool demo
+
+The `DebuggerDemo` node (child of `Main`) auto-ticks every 2 seconds and increments internal counters. Press `Space` or click in the game window to trigger a built-in `breakpoint`.
+
+With the game paused at the breakpoint:
+1. **Enable the `debugger` toolset** via MCP: `enable_toolset("debugger")`
+2. **Get call stack**: `get_stack_frames()` → see the stack from `_trigger_debuggable_action` up to `_input`
+3. **Evaluate expressions**: `evaluate_expression("_counters['a'] * 2 + _history.size()")` → inspect live state
+4. **Step through code**: `step_into()` or `step_over()` → observe line-by-line execution
+5. **Continue**: `continue_execution()` → resume the game
+
 ## Notes
 
 - Uses placeholder `ColorRect` sprites for quick visual prototyping.
 - No external assets required — pure Godot primitives.
 - Enemy spawner keeps enemies ≤ 200 to avoid performance issues.
 - Game pauses during upgrade menu; unpause after selection.
+- The `DebuggerDemo` node has `visible = false` by default — it does not affect gameplay visuals.
