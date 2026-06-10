@@ -35,6 +35,8 @@ class LLMCall:
     tool: str
     params: dict[str, Any]
     reasoning: str = ""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 @dataclass
@@ -72,16 +74,19 @@ class OllamaAgent:
             f"4. Respond ONLY with a JSON object:\n"
             f"   {{\"tool\": \"...\", \"params\": {{...}}, \"reasoning\": \"...\"}}\n"
             f"5. Use empty params {{}} if the tool takes no arguments.\n"
-            f"6. When done, respond with {{\"tool\": \"done\"}}"
+            f"6. You MUST take at least one action to make progress on the task.\n"
+            f"7. Only return {{\"tool\": \"done\"}} AFTER you have completed the task."
         )
 
     def _ask(self, task: str, available_tools: list[dict]) -> LLMCall:
         """Ask the LLM to choose the next tool."""
         system = self._system_prompt(task, available_tools)
-        messages = [
-            {"role": "system", "content": system},
-            *self._history,
-        ]
+        # qwen3-coder:30b on Ollama ignores system role; prepend to first user message
+        messages = self._history.copy()
+        if not messages:
+            messages = [{"role": "user", "content": system}]
+        else:
+            messages.insert(0, {"role": "user", "content": system})
 
         resp = requests.post(
             OLLAMA_URL,
@@ -96,6 +101,10 @@ class OllamaAgent:
         resp.raise_for_status()
         data = resp.json()
         content = data["message"]["content"]
+
+        # Extract token counts from Ollama response
+        prompt_tokens = data.get("prompt_eval_count", 0)
+        completion_tokens = data.get("eval_count", 0)
 
         # Parse JSON from the response
         try:
@@ -130,6 +139,8 @@ class OllamaAgent:
             tool=parsed.get("tool", "done"),
             params=parsed.get("params", {}),
             reasoning=parsed.get("reasoning", ""),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
 
     async def _execute(self, call: LLMCall) -> dict:
@@ -179,22 +190,92 @@ class OllamaAgent:
 
 
 def get_available_tools() -> list[dict]:
-    """Return a subset of tools the LLM agent can use."""
+    """Return tools that actually exist in the Godot addon bridge."""
     return [
-        {"name": "list_toolsets", "description": "See available tool categories"},
-        {"name": "enable_toolset", "description": "Enable a tool category"},
-        {"name": "disable_toolset", "description": "Disable a tool category"},
-        {"name": "get_project_info", "description": "Get project name, main scene, autoloads"},
-        {"name": "get_scene_tree", "description": "Get open scene's node hierarchy"},
-        {"name": "create_node", "description": "Add a node (needs scene_edit)"},
-        {"name": "set_node_property", "description": "Set a node property (needs scene_edit)"},
-        {"name": "play_scene", "description": "Run game in editor (needs runtime)"},
-        {"name": "simulate_key", "description": "Send key press (needs input + runtime)"},
-        {"name": "get_game_scene_tree", "description": "Get live game tree (needs runtime)"},
-        {"name": "get_editor_performance", "description": "Read editor FPS (needs profiling)"},
-        {"name": "write_script", "description": "Write a GDScript (needs scripts)"},
-        {"name": "get_parse_errors", "description": "Check script syntax (needs scripts)"},
-        {"name": "done", "description": "Signal that the task is complete"},
+        {
+            "name": "get_project_info",
+            "description": "Get project name, main scene, autoloads.",
+        },
+        {
+            "name": "get_scene_tree",
+            "description": (
+                "Get open scene's node hierarchy. Use this to find node paths "
+                "before operating on nodes."
+            ),
+        },
+        {
+            "name": "create_node",
+            "description": (
+                "Add a node to the scene. Params: parent_path='.' for root, "
+                "node_type (e.g., 'Node2D'), name (node name)."
+            ),
+        },
+        {
+            "name": "set_node_property",
+            "description": (
+                "Set a node property. If the property doesn't exist, the error hint "
+                "suggests using get_node_property_list first."
+            ),
+        },
+        {
+            "name": "play_scene",
+            "description": (
+                "Run the game in the editor. Call this BEFORE using any runtime/input tools "
+                "that need an active play session."
+            ),
+        },
+        {
+            "name": "stop_scene",
+            "description": "Stop the running game.",
+        },
+        {
+            "name": "get_game_scene_tree",
+            "description": (
+                "Get the live game scene tree while game is running. "
+                "Use this INSTEAD OF get_scene_tree when the game is playing. "
+                "Requires active play session."
+            ),
+        },
+        {
+            "name": "simulate_key",
+            "description": (
+                "Send a key press to the running game. "
+                "Requires active play session (call play_scene first)."
+            ),
+        },
+        {
+            "name": "get_editor_performance",
+            "description": (
+                "Read editor FPS and performance. Use when game is NOT running."
+            ),
+        },
+        {
+            "name": "write_script",
+            "description": (
+                "Write a GDScript to a file. "
+                "Params: script_path (e.g., res://scripts/foo.gd), content (the script text)."
+            ),
+        },
+        {
+            "name": "attach_script",
+            "description": (
+                "Attach a script to a node. "
+                "Params: node_path (the node), script_path (the script file). "
+                "The script must already exist."
+            ),
+        },
+        {
+            "name": "batch_set_property",
+            "description": (
+                "Set a property on multiple nodes at once. "
+                "More efficient than calling set_node_property for each node individually. "
+                "Params: node_paths (array), property, value."
+            ),
+        },
+        {
+            "name": "done",
+            "description": "Signal that the task is complete. Only call after task is fully done.",
+        },
     ]
 
 
