@@ -6,8 +6,13 @@ extends Node
 ## EngineDebugger message capture on the "godot_mcp" channel and answers queries from the
 ## addon's MCPDebugger (editor side). It does nothing outside a debug session, so it is
 ## safe to leave enabled (it no-ops in exported/non-debug builds).
+##
+## Games that want to support force_break should check ``force_break_pending`` in their
+## main loop (e.g. _process) and call the ``breakpoint`` keyword when it is true.
 
 const MAX_DEPTH := 32
+
+var force_break_pending: bool = false  ## Set true by the editor via force_break message.
 
 
 func _ready() -> void:
@@ -56,7 +61,12 @@ func _capture(message: String, data: Array) -> bool:
 			EngineDebugger.clear_breakpoints()
 			return true
 		"force_break":
-			EngineDebugger.debug(true, false)
+			# Set a flag that the game can check in its _process loop.
+			# Calling EngineDebugger.debug() from inside _capture() deadlocks
+			# because debug() blocks until the editor replies with continue/step.
+			force_break_pending = true
+			EngineDebugger.send_message("godot_mcp:force_break_ack", [])
+			print("[MCPRuntimeProbe] force_break_pending SET to true")
 			return true
 	return false
 

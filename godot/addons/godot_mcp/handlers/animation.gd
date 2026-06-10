@@ -215,5 +215,3 @@ func _resolve_player_animation(params: Dictionary) -> Dictionary:
 	if not player.has_animation(anim_name):
 		return _router._fail("RESOURCE_NOT_FOUND", "No animation '%s' on the AnimationPlayer." % anim_name)
 	return {"ok": true, "animation": player.get_animation(anim_name)}
-
-

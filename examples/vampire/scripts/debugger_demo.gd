@@ -12,9 +12,17 @@ var _counters: Dictionary = {"a": 0, "b": 0}
 var _history: Array = []
 
 func _ready() -> void:
-	print("DebuggerDemo ready — press Space or click to trigger a debug breakpoint.")
+	print("DebuggerDemo ready — game will auto-pause in 2 seconds for debugger demo.")
+	# Auto-pause after 2 seconds so we can test debugger tools without manual input
+	await get_tree().create_timer(2.0).timeout
+	breakpoint
 
 func _process(delta: float) -> void:
+	# Check for MCP force_break request
+	if MCPRuntimeProbe.force_break_pending:
+		MCPRuntimeProbe.force_break_pending = false
+		breakpoint
+	
 	if not demo_enabled:
 		return
 	_tick_timer += delta

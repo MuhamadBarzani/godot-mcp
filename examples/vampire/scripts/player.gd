@@ -34,7 +34,12 @@ func _draw() -> void:
 	draw_circle(Vector2.ZERO, 20.0, Color(0.2, 0.6, 1, 1))
 
 func _physics_process(delta: float) -> void:
-	if not alive:
+	# MCP debugger: check for force_break request
+	if MCPRuntimeProbe.force_break_pending:
+		MCPRuntimeProbe.force_break_pending = false
+		breakpoint
+	
+i 	if not alive:
 		return
 	
 	# WASD / arrow key movement
