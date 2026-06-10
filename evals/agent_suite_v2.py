@@ -123,9 +123,15 @@ class BridgeConnector:
         await self._bridge.close()
 
     async def cleanup(self) -> None:
-        """Reset state between tasks: stop scene, disable toolsets."""
+        """Reset state between tasks: disable all toolsets, stop scene."""
+        # Disable all non-core toolsets to force clean gating state
+        for category in [
+            "scene_edit", "scripts", "runtime", "input", "testing",
+            "batch", "physics", "resources_edit", "profiling",
+            "analysis", "export", "asset_import", "debugger",
+        ]:
+            await self.call("cmd_disable_toolset", {"category": category})
         await self.call("cmd_stop_scene", {})
-        # Give Godot a moment to settle
         await asyncio.sleep(0.3)
 
 
