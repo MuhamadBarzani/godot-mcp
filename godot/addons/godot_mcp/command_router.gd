@@ -342,8 +342,12 @@ func _resolve(raw_path: Variant) -> Dictionary:
 	if root == null:
 		return _fail("PRECONDITION_FAILED", "No scene is open.", "active_scene")
 	var path_str := str(raw_path)
+	# Strip leading slashes ("/Player" -> "Player")
 	if path_str.begins_with("/"):
 		path_str = path_str.substr(1)
+	# Also strip "root/" prefix commonly hallucinated by LLMs ("/root/Player" -> "Player")
+	if path_str.begins_with("root/"):
+		path_str = path_str.substr(5)
 	if path_str.is_empty():
 		path_str = "."
 	var node: Node = root.get_node_or_null(NodePath(path_str))
@@ -357,6 +361,11 @@ func _resolve(raw_path: Variant) -> Dictionary:
 ## instead of O(n) over the property list. Cache refreshes automatically on a
 ## cache miss so attaching scripts / adding exported vars doesn't leave stale data.
 var _prop_cache: Dictionary = {}  # {Object instance_id: {name: type}}
+const MAX_PROP_CACHE_SIZE := 256
+
+func _prune_prop_cache() -> void:
+	if _prop_cache.size() > MAX_PROP_CACHE_SIZE:
+		_prop_cache.clear()
 
 func _property_type(obj: Object, property: String) -> int:
 	var obj_id := obj.get_instance_id()
@@ -367,6 +376,7 @@ func _property_type(obj: Object, property: String) -> int:
 		for entry in obj.get_property_list():
 			cache[entry["name"]] = int(entry["type"])
 		_prop_cache[obj_id] = cache
+		_prune_prop_cache()
 	return cache.get(property, -1)
 
 
