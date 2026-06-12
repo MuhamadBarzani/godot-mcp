@@ -171,6 +171,17 @@ def test_router_registers_node_parity_commands() -> None:
         assert f'"{command}"' in source, f"router must register {command}"
 
 
+def test_router_registers_composite_commands() -> None:
+    source = "".join(f.read_text() for f in ADDON_DIR.rglob("*.gd"))
+    for command in ("cmd_compose_node", "cmd_batch_create_nodes", "cmd_apply_node_edits"):
+        assert f'"{command}"' in source, f"router must register {command}"
+    # Each of the three composites must wrap its tree mutation in exactly one
+    # UndoRedo action: one create_action + one commit_action per handler.
+    composite = (ADDON_DIR / "handlers" / "composite.gd").read_text()
+    assert composite.count(".create_action(") == 3
+    assert composite.count(".commit_action(") == 3
+
+
 def test_router_registers_resource_commands() -> None:
     source = "".join(f.read_text() for f in ADDON_DIR.rglob("*.gd"))
     for command in (
