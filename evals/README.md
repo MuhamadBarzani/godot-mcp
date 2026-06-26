@@ -1,7 +1,8 @@
 # Evaluation Framework for godot-mcp
 
 Real LLM agent evaluation suite for the godot-mcp bridge. Tests multi-dimensional agent
-behavior (tool choice, prerequisites, recovery, efficiency) across all 28 bridge tools.
+behavior (tool choice, prerequisites, recovery, efficiency) across a 28-task suite that
+exercises a representative slice of the full tool surface.
 Supports both local (Ollama) and cloud (Claude/GPT/Gemini) LLMs for comparison matrices.
 Metrics are logged to MLFlow via curl-based REST API.
 
