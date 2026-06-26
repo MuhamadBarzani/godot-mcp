@@ -2,7 +2,7 @@
 
 A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for **AI-driven Godot development**. An AI agent (Claude Code, OpenCode, Cursor, or any stdio MCP client) connects to a live Godot 4.4+ editor and controls it programmatically — inspecting scenes, editing nodes, writing scripts, running the game, and exporting builds — all through a typed, structured API with no built-in game vocabulary.
 
-> **Status:** feature-complete across the planned ecosystem. **139 tools** across **23 gated toolsets** (plus always-on `core`). Every capability is documented, tested, and ready for agent use.
+> **Status:** feature-complete across the planned ecosystem. **175 tools** across **28 toolsets** (27 gated off by default, plus always-on `core`). Every capability is documented, tested, and ready for agent use.
 
 ---
 
@@ -51,25 +51,38 @@ The server is **game-agnostic** — it knows Godot, not your game. A tower-defen
 
 Every agent action crosses a four-layer chain:
 
+```mermaid
+flowchart TD
+    AI["AI client<br/>Claude Code · OpenCode · Cursor · any stdio MCP client"]
+    SRV["FastMCP server · Python 3.11+ · <code>mcp_server/</code><br/>Pydantic schemas · safety classes · preconditions · no Godot logic"]
+    ADDON["Godot addon · GDScript · <code>godot/addons/godot_mcp/</code><br/>EditorPlugin: TCPServer + WebSocketPeer · routes cmd_* envelopes"]
+    PROJ["Live Godot project"]
+    AI -->|"stdio · MCP protocol (JSON-RPC)"| SRV
+    SRV -->|"WebSocket · ws://localhost:9080"| ADDON
+    ADDON -->|"Godot Editor API"| PROJ
+    PROJ -.->|"result"| ADDON
+    ADDON -.->|"{id, ok, result, error, hint}"| SRV
+    SRV -.->|"typed tool result"| AI
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  AI Client (Claude Code / OpenCode / Cursor / any MCP client)│
-│         ↓  stdio (MCP protocol JSON-RPC)                      │
-├─────────────────────────────────────────────────────────────┤
-│  FastMCP Server  (Python 3.11+, mcp_server/)                  │
-│    • Pydantic schemas, safety classes, preconditions          │
-│    • No Godot logic — pure delegation over WebSocket        │
-│         ↓  WebSocket  ws://localhost:9080                   │
-├─────────────────────────────────────────────────────────────┤
-│  Godot Addon  (GDScript, godot/addons/godot_mcp/)             │
-│    • EditorPlugin with TCPServer + WebSocketPeer              │
-│    • Routes cmd_* envelopes to Godot Editor API handlers      │
-│    • The ONLY layer that touches Godot                       │
-│         ↓  Godot Editor API                                   │
-├─────────────────────────────────────────────────────────────┤
-│  Live Godot Project                                           │
-└─────────────────────────────────────────────────────────────┘
+
+A single tool call — `godot_scene_edit_create_node` — travels the full chain and back:
+
+```mermaid
+sequenceDiagram
+    participant AI as AI client
+    participant SRV as FastMCP server
+    participant ADDON as Godot addon
+    participant GD as Godot editor
+    AI->>SRV: godot_scene_edit_create_node(parent_path, node_type, node_name)
+    Note over SRV: validate typed args ·<br/>check safety class + preconditions
+    SRV->>ADDON: {id, command: "cmd_create_node", params}
+    ADDON->>GD: EditorInterface API (UndoRedo-wrapped)
+    GD-->>ADDON: node created
+    ADDON-->>SRV: {id, ok: true, result: {node_path, created}}
+    SRV-->>AI: CreateNodeResult { node_path, created }
 ```
+
+> Solid arrows are the request path (top-down); dashed arrows are the response envelope flowing back up.
 
 The boundary is deliberate and enforced by design rules:
 - **Only the addon touches Godot.** The server has no Godot imports.
@@ -84,7 +97,7 @@ Read [`docs/architecture.md`](docs/architecture.md) for the full bridge contract
 
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
-| **Godot** | 4.4 | 4.4–4.6.x |
+| **Godot** | 4.4 | 4.7 (validated target) |
 | **Python** | 3.11 | 3.13 |
 | **Package manager** | [uv](https://docs.astral.sh/uv/) | uv |
 | **OS** | macOS / Linux / Windows | Any desktop |
@@ -233,31 +246,32 @@ The server exposes two transports:
 
 ### Toolsets and the Gated Surface
 
-With 121 tools, showing everything at once would overwhelm an agent's context window and degrade tool selection. So tools are **grouped into toolsets** and most are **gated off by default**.
+With 175 tools, showing everything at once would overwhelm an agent's context window and degrade tool selection. So tools are **grouped into toolsets** and most are **gated off by default**.
 
 **Always exposed:**
 - `core` — diagnostics, toolset management, safety introspection
 - `inspection` — read-only project/scene/node inspection
 
-**Gated off by default** (22 toolsets):
-`scene_edit`, `scripts`, `resources_edit`, `project`, `editor`, `physics`, `animation`, `scene_3d`, `particles`, `navigation`, `audio`, `tilemap`, `theme_ui`, `shader`, `runtime`, `input`, `testing`, `profiling`, `batch`, `analysis`, `export`, `input_map`
+**Gated off by default** (27 toolsets):
+`scene_edit`, `scripts`, `resources_edit`, `project`, `editor`, `physics`, `animation`, `scene_3d`, `particles`, `navigation`, `audio`, `tilemap`, `theme_ui`, `shader`, `visual_shader`, `runtime`, `input`, `input_map`, `testing`, `profiling`, `batch`, `analysis`, `export`, `debugger`, `asset_import`, `project_scaffold`, `composite`
 
 **Meta-tools** (always available in `core`):
 
 | Tool | Purpose |
 |------|---------|
+| `godot_get_server_info` | Full capability snapshot: toolsets, prompts, resources, bridge state, troubleshooting |
 | `godot_list_toolsets` | Discover toolsets, their enabled state, and version requirements |
-| `enable_toolset(category)` | Expose a toolset's tools (fires `tools/list_changed`) |
-| `disable_toolset(category)` | Hide a toolset to keep the surface small |
+| `godot_enable_toolset(category)` | Expose a toolset's tools (fires `tools/list_changed`) |
+| `godot_disable_toolset(category)` | Hide a toolset to keep the surface small |
 | `godot_list_tools_by_safety_class` | Report which tools are `read_only` / `mutating` / `destructive` / `runtime` |
 
 Enable a toolset before using its tools:
 
 ```
-Agent: enable_toolset("scene_edit")
+Agent: godot_enable_toolset("scene_edit")
 Server: { "name": "scene_edit", "enabled": true, "description": "...", "min_godot": "4.4" }
 
-Agent: create_node(parent_path=".", node_type="CharacterBody2D", node_name="Player")
+Agent: godot_scene_edit_create_node(parent_path=".", node_type="CharacterBody2D", node_name="Player")
 Server: { "node_path": "./Player", "created": true }
 ```
 
@@ -413,7 +427,7 @@ Some tools inspect or drive a **running** game (not the editor). This requires t
 
 ## All Toolsets
 
-The full surface is 121 tools across 23 categories. Below is a summary; the authoritative per-tool spec is in [`docs/tool-contracts.md`](docs/tool-contracts.md).
+The full surface is 175 tools across 29 categories (`core` + 28 toggleable toolsets). Below is a summary; the authoritative per-tool spec is in [`docs/tool-contracts.md`](docs/tool-contracts.md).
 
 ### Core (always on)
 - `godot_health_check` — server version + bridge state
@@ -518,6 +532,25 @@ The full surface is 121 tools across 23 categories. Below is a summary; the auth
 
 ### Input Map (gated, Godot 4.4+) — `mutating` / `destructive` / `read_only`
 - `godot_input_map_add_action`, `godot_input_map_remove_action` (destructive), `godot_input_map_add_event`, `godot_input_map_clear_action_events` (destructive), `godot_input_map_get_action_events` (read_only)
+
+### Visual Shaders (gated) — `read_only` / `mutating`
+- `godot_visual_shader_create`, `godot_visual_shader_add_node`, `godot_visual_shader_connect_nodes`, `godot_visual_shader_set_node_param`
+- `godot_visual_shader_list_node_types`, `godot_visual_shader_read` — node-graph introspection
+
+### Debugger (gated) — `runtime`
+- **Breakpoints:** `godot_debugger_set_breakpoint`, `godot_debugger_remove_breakpoint`, `godot_debugger_clear_breakpoints`
+- **Execution:** `godot_debugger_force_break`, `godot_debugger_continue_execution`, `godot_debugger_step_into`, `godot_debugger_step_over`, `godot_debugger_step_out`
+- **Inspect paused state:** `godot_debugger_get_stack_frames`, `godot_debugger_get_frame_variables`, `godot_debugger_evaluate_expression`
+
+### Asset Import (gated) — `read_only` / `mutating`
+- `godot_asset_import_asset`, `godot_asset_import_get_status` — import external assets and poll status
+- `godot_asset_import_create_material_from_textures` — build a `StandardMaterial3D` from texture maps
+
+### Project Scaffold (gated) — `destructive`
+- `godot_project_scaffold` — generate a new project skeleton (directories, `project.godot`, starter scenes); destructive, needs `confirm`
+
+### Composite / Macro (gated) — `mutating`
+- `godot_composite_compose_node`, `godot_composite_batch_create_nodes`, `godot_composite_apply_node_edits`, `godot_composite_run_commands` — one-call macros that fold several mutations into a single undo-tracked operation
 
 ### Resources (`godot://` URIs)
 Read-only snapshots refreshed on access:

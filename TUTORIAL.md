@@ -51,14 +51,6 @@ script writing, runtime testing, or batch operations, you MUST:
 2. Call godot_list_toolsets() to see what is available and which are enabled.
 3. Call godot_enable_toolset(category) for every category you plan to use.
 4. Only after enabling can you call the tools in that category.
-```
-You are working with a godot-mcp server. Tools are gated into categories called 'toolsets'. 
-Only 'core' and 'inspection' are enabled by default. Before doing any scene editing, 
-script writing, runtime testing, or batch operations, you MUST:
-
-1. Call godot_list_toolsets() to see what is available and which are enabled.
-2. Call godot_enable_toolset(category) for every category you plan to use.
-3. Only after enabling can you call the tools in that category.
 
 Common toolsets:
 - scene_edit  → godot_scene_edit_create_node, godot_scene_edit_set_node_property, godot_scene_edit_attach_script, godot_scene_edit_save_scene
@@ -73,7 +65,17 @@ Common toolsets:
 If you get 'ToolError: unknown tool', the toolset is not enabled. Call godot_enable_toolset first.
 ```
 
----
+Every agent session follows the same gated-surface loop — discover, enable, then build and play-test:
+
+```mermaid
+flowchart LR
+    A["godot_get_server_info()<br/>capability snapshot"] --> B["godot_list_toolsets()"]
+    B --> C["godot_enable_toolset(category)"]
+    C --> D["call the toolset's tools<br/>build · script · run"]
+    D --> E{"need another<br/>capability?"}
+    E -->|yes| C
+    E -->|no| F["play-test &amp; verify<br/>godot_runtime_* · godot_testing_*"]
+```
 
 ---
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-The planned ecosystem is **feature-complete**: the engine (scaffold #1, addon + dock #2, bridge #3, server #4, inspection #5, safety #14, mutation #6, scripts #10, `godot://` resources #11, runtime loop #13, toolset gating #26) plus every content domain and capability — physics #41, animation #39, 3D scene #40, particles #42, navigation #43, audio #44, tilemap #45, theme/UI #46, shaders #47, the runtime session bridge #66 (live inspection #35, input sim #36 + recording #68, profiling #38), play-testing/QA #37, batch refactor #48, static analysis #49, and export #50 — are merged. TileSet authoring #82 and MeshLibrary authoring #83 add the resource-authoring tools that let the tilemap and gridmap surfaces place real content. 121 tools across 22 gated toolsets (plus always-on `core`). New work now means new GitHub issues; the issues remain the authoritative spec, so read the relevant one before implementing. `docs/tool-contracts.md` is the source of truth for the current tool surface.
+The planned ecosystem is **feature-complete**: the engine (scaffold #1, addon + dock #2, bridge #3, server #4, inspection #5, safety #14, mutation #6, scripts #10, `godot://` resources #11, runtime loop #13, toolset gating #26) plus every content domain and capability — physics #41, animation #39, 3D scene #40, particles #42, navigation #43, audio #44, tilemap #45, theme/UI #46, shaders #47, the runtime session bridge #66 (live inspection #35, input sim #36 + recording #68, profiling #38), play-testing/QA #37, batch refactor #48, static analysis #49, and export #50 — are merged. TileSet authoring #82 and MeshLibrary authoring #83 add the resource-authoring tools that let the tilemap and gridmap surfaces place real content. 175 tools across 28 toolsets (27 gated off by default, plus always-on `core`). New work now means new GitHub issues; the issues remain the authoritative spec, so read the relevant one before implementing. `docs/tool-contracts.md` is the source of truth for the current tool surface.
 
 **godot-mcp is a generic, game-agnostic Godot MCP server.** It exposes Godot editor capabilities (inspection, scene mutation, scripts, runtime) over MCP — it has no built-in game vocabulary. Any specific game (e.g. a tower-defense roguelite) is a **separate project** that consumes this server; its domain models, semantic tools, and prompts live in that project, not here.
 
@@ -34,14 +34,15 @@ A two-part system for **AI-driven Godot development**: an AI client (Claude Code
 
 The defining feature is a **four-layer transport chain** (issue #3). Every agent action crosses all four layers:
 
-```
-AI client (Claude Code / OpenCode / any stdio MCP client)
-    │  stdio (MCP protocol)
-FastMCP server  (Python, mcp_server/)
-    │  WebSocket — localhost, default ws://localhost:9080
-Godot EditorPlugin  (GDScript, godot/addons/godot_mcp/)
-    │  Godot Editor API
-Live Godot project
+```mermaid
+flowchart TD
+    AI["AI client (Claude Code / OpenCode / any stdio MCP client)"]
+    SRV["FastMCP server (Python, mcp_server/)"]
+    ADDON["Godot EditorPlugin (GDScript, godot/addons/godot_mcp/)"]
+    PROJ["Live Godot project"]
+    AI -->|"stdio (MCP protocol)"| SRV
+    SRV -->|"WebSocket — localhost, default ws://localhost:9080"| ADDON
+    ADDON -->|"Godot Editor API"| PROJ
 ```
 
 - **MCP server** (`mcp_server/`, Python 3.11+, FastMCP) — the AI-facing entry point over stdio. Exposes **tools**, **resources** (`godot://...` URIs, issue #11), and **prompts** (workflow templates, issue #12). It owns all safety/permission logic and Pydantic domain models; it holds **no** Godot logic itself — it forwards to the addon over the WebSocket bridge.
@@ -54,7 +55,7 @@ A typical MCP tool is a thin wrapper: validate/typed-schema in Python → `bridg
 ```
 godot/addons/godot_mcp/    plugin.cfg, godot_mcp.gd (EditorPlugin), dock, cmd_* handlers, type_coerce.gd
 mcp_server/                main.py (stdio entrypoint), tools/, resources/, prompts/, models/ (Pydantic)
-docs/                      architecture.md (bridge contract), tool-contracts.md, domain-model.md
+docs/                      architecture.md (bridge contract), tool-contracts.md
 ```
 
 ## Cross-cutting conventions
@@ -68,7 +69,7 @@ These span many files and are the things easiest to get wrong:
 - **JSON-safe serialization** — the scene tree and node properties must serialize to JSON-safe types only (no Godot objects). Large trees support a `max_depth` parameter.
 - **Type coercion** (issue #6) — Godot types (`Vector2/3`, `Color`, `Rect2`, `NodePath`) are coerced to/from JSON in a dedicated `type_coerce.gd` helper, not inline.
 - **Read-only vs. mutating split** — read-only context is exposed both as tools (issue #5) and as `godot://` resources (issue #11); mutations only ever go through tools.
-- **Naming** — `snake_case` for all domain/data fields and Pydantic models; addon command handlers are `cmd_<verb>_<noun>`; matching MCP tools drop the `cmd_` prefix.
+- **Naming** — `snake_case` for all domain/data fields and Pydantic models; addon command handlers are `cmd_<verb>_<noun>`. Every MCP tool is exposed as `godot_<toolset>_<action>` (issue #224) — the prefix *is* the gating toolset (always-on `core`/meta tools are `godot_<action>`); the mapping is applied centrally in `mcp_server/tool_naming.py` and enforced by `tests/contract/test_tool_naming.py`.
 
 ## Game-agnostic scope
 
@@ -84,9 +85,9 @@ The scaffold (issue #1) is in place: `uv`-managed Python package, the addon unde
   - `uv run pytest -q` — full suite; single file `uv run pytest tests/unit/test_smoke.py`; single test `uv run pytest tests/unit/test_smoke.py::test_version_is_calver`.
   - `uv run ruff check .` — lint; `uv run mypy` — type check.
   - `./.claude/hooks/check-no-skipped-tests.sh` — zero-skip suite-health gate.
-- Server entrypoint: `uv run godot-mcp` (stdio). It currently exits with a "not yet bootstrapped" message; the FastMCP server and the `health_check` tool (server version + bridge connection state) land in issue #4.
+- Server entrypoint: `uv run godot-mcp` runs the live FastMCP server over stdio (or HTTP via `GODOT_MCP_TRANSPORT=http`, default `127.0.0.1:9090`). `godot_health_check`, `godot_get_server_info` (capability snapshot), and the toolset-gating tools are all shipped.
 - The addon is enabled via Godot's *Project Settings → Plugins* (open the `godot/` folder as a project); the bridge defaults to `ws://localhost:9080` (configurable). No auth in v1 (localhost-only).
-- Clients register the server as a local stdio MCP command: Claude Code via `.mcp.json` / `claude mcp add`, OpenCode via `opencode.json`. Document concrete examples for both once the entrypoint is bootstrapped (issue #4).
+- Clients register the server as a local stdio MCP command: Claude Code via `.mcp.json` / `claude mcp add`, OpenCode via `opencode.json` (concrete examples in `README.md`).
 
 ## Output and Responses
 - For implementation tasks: output code blocks only, no prose

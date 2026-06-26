@@ -15,15 +15,21 @@ surface is specified in [`tool-contracts.md`](tool-contracts.md). The grounding 
 
 Every agent action crosses all four layers:
 
+```mermaid
+flowchart TD
+    AI["AI client (Claude Code / OpenCode / any stdio MCP client)"]
+    SRV["FastMCP server (Python, mcp_server/)<br/>WebSocket client · owns safety + Pydantic models"]
+    ADDON["Godot EditorPlugin (GDScript, godot/addons/godot_mcp/)<br/>WebSocket server (TCPServer→WebSocketPeer) · only layer touching Godot"]
+    PROJ["Live Godot project"]
+    AI -->|"stdio (MCP protocol)"| SRV
+    SRV -->|"WebSocket — localhost, default ws://localhost:9080"| ADDON
+    ADDON -->|"Godot Editor API"| PROJ
+    PROJ -.->|"result envelope"| ADDON
+    ADDON -.->|"{id, ok, result, error}"| SRV
+    SRV -.->|"typed tool result"| AI
 ```
-AI client (Claude Code / OpenCode / any stdio MCP client)
-    │  stdio (MCP protocol)
-FastMCP server  (Python, mcp_server/)
-    │  WebSocket — localhost, default ws://localhost:9080
-Godot EditorPlugin  (GDScript, godot/addons/godot_mcp/)
-    │  Godot Editor API
-Live Godot project
-```
+
+Solid arrows are the request path the **server initiates**; dashed arrows are the response envelopes flowing back.
 
 - **MCP server** (`mcp_server/`) is the WebSocket **client** and the AI-facing stdio
   server. It owns all safety, permission, and precondition logic and the Pydantic domain
