@@ -12,6 +12,13 @@
 #     variable, or bake it at the default path below in the runner image.
 # The eval workflow uses the same self-hosted convention (label `godot-eval`); a
 # single runner can carry both labels if it has Godot installed.
+#
+# SECURITY (public repo): a self-hosted runner must never execute untrusted fork
+# code. The job below is guarded so only same-repo branch PRs, manual dispatch, and
+# the nightly schedule run on the runner — fork PRs skip it. Also set the repo
+# Actions setting "Require approval for all outside collaborators" and prefer an
+# ephemeral runner (fresh pod per job) so a run can't persist state or reach the
+# co-located `godot-eval` runner's credentials.
 name: e2e
 
 on:
@@ -25,6 +32,8 @@ on:
       - "uv.lock"
       - ".github/workflows/e2e.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC nightly regression safety net
 
 # One in-flight run per ref; cancel superseded PR pushes so the runner isn't queued up.
 concurrency:
@@ -38,6 +47,14 @@ jobs:
   editor-suites:
     name: live editor (e2e + addon smoke)
     runs-on: [self-hosted, godot]
+    # SECURITY (public repo + self-hosted runner): never execute untrusted fork code
+    # on the runner. Only same-repo branch PRs, manual dispatch, and the schedule run;
+    # fork PRs skip this job (it reports as skipped, non-blocking). Defense-in-depth on
+    # top of the repo setting "Require approval for all outside collaborators"; prefer
+    # an ephemeral runner so each run starts from a clean pod.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     timeout-minutes: 20
     env:
       # Provided by the runner image, or override with the GODOT_BIN repo variable.
@@ -56,8 +73,16 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen
 
-      - name: Show Godot version
-        run: '"$GODOT_BIN" --version'
+      - name: Verify Godot version (pinned to 4.7)
+        # The suites are validated against the version the godot/ project declares
+        # (config/features=PackedStringArray("4.7")). Fail fast if the runner drifts.
+        run: |
+          ver="$("$GODOT_BIN" --version)"
+          echo "Godot: $ver"
+          case "$ver" in
+            4.7*) ;;
+            *) echo "::error::expected Godot 4.7.x on the runner, got '$ver'"; exit 1 ;;
+          esac
 
       - name: Warm asset import
         # Populate .godot/ once so the editor doesn't import on first launch mid-test
