@@ -172,7 +172,7 @@ def create_server(
     register_diagnostics(mcp, bridge, config, manager)
 
     # Register workflow prompts (instruction templates for the agent).
-    prompt_names = register_prompts(mcp)
+    prompt_names = register_prompts(mcp, bridge)
 
     # Derive standard MCP annotations (readOnlyHint/destructiveHint/...) from each
     # tool's safety_class, for every tool incl. gated-off ones (issue #220).
