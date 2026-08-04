@@ -1,0 +1,100 @@
+# Live-editor end-to-end suites — the coverage the GitHub-hosted `ci` job can't
+# provide. The e2e (`test_*_e2e.py`) and addon-smoke (`test_addon_*.py`) tests are
+# gated `skipif(GODOT_BIN is None)`, so on `ubuntu-latest` they silently skip.
+# This job runs them on a SELF-HOSTED runner that has a Godot editor binary —
+# closing the CI gap behind #263/#269.
+#
+# RUNNER REQUIREMENTS (k3s self-hosted, label `godot`):
+#   - Godot 4.7 *editor* binary (not the export-template/server build — the suites
+#     need `--editor`). Runs fully headless via `--headless` (dummy display/audio).
+#   - Python 3.11+ and uv available (or installed by the steps below).
+#   - The binary path is `$GODOT_BIN` — set the `GODOT_BIN` repo/org Actions
+#     variable, or bake it at the default path below in the runner image.
+# The eval workflow uses the same self-hosted convention (label `godot-eval`); a
+# single runner can carry both labels if it has Godot installed.
+#
+# SECURITY (public repo): a self-hosted runner must never execute untrusted fork
+# code. The job below is guarded so only same-repo branch PRs, manual dispatch, and
+# the nightly schedule run on the runner — fork PRs skip it. Also set the repo
+# Actions setting "Require approval for all outside collaborators" and prefer an
+# ephemeral runner (fresh pod per job) so a run can't persist state or reach the
+# co-located `godot-eval` runner's credentials.
+name: e2e
+
+on:
+  pull_request:
+    # Editor suites validate the addon + bridge + server; skip doc-only churn.
+    paths:
+      - "godot/**"
+      - "mcp_server/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC nightly regression safety net
+
+# One in-flight run per ref; cancel superseded PR pushes so the runner isn't queued up.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  editor-suites:
+    name: live editor (e2e + addon smoke)
+    runs-on: [self-hosted, godot]
+    # SECURITY (public repo + self-hosted runner): never execute untrusted fork code
+    # on the runner. Only same-repo branch PRs, manual dispatch, and the schedule run;
+    # fork PRs skip this job (it reports as skipped, non-blocking). Defense-in-depth on
+    # top of the repo setting "Require approval for all outside collaborators"; prefer
+    # an ephemeral runner so each run starts from a clean pod.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 20
+    env:
+      # Provided by the runner image, or override with the GODOT_BIN repo variable.
+      GODOT_BIN: ${{ vars.GODOT_BIN || '/opt/godot/godot' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.1
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Verify Godot version (pinned to 4.7)
+        # The suites are validated against the version the godot/ project declares
+        # (config/features=PackedStringArray("4.7")). Fail fast if the runner drifts.
+        run: |
+          ver="$("$GODOT_BIN" --version)"
+          echo "Godot: $ver"
+          case "$ver" in
+            4.7*) ;;
+            *) echo "::error::expected Godot 4.7.x on the runner, got '$ver'"; exit 1 ;;
+          esac
+
+      - name: Warm asset import
+        # Populate .godot/ once so the editor doesn't import on first launch mid-test
+        # (the suites' connect-retry covers a cold start, but this removes the flake).
+        # Best-effort: unrelated import warnings must not fail the run.
+        run: 'timeout 180 "$GODOT_BIN" --headless --import --path godot/ || true'
+
+      - name: Editor e2e + addon smoke suites
+        # The two globs match exactly the editor-dependent integration tests
+        # (everything gated on GODOT_BIN / using run_godot); new e2e files are
+        # picked up automatically. -p no:cacheprovider keeps the runner workspace clean.
+        run: >-
+          uv run pytest -q -p no:cacheprovider
+          tests/integration/test_*_e2e.py
+          tests/integration/test_addon_*.py
