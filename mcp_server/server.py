@@ -20,6 +20,7 @@ from fastmcp import FastMCP
 from fastmcp_tasks import TasksExtension
 
 from mcp_server.bridge import Bridge
+from mcp_server.capabilities import STATIC_CAPABILITY, apply_capability
 from mcp_server.config import ServerConfig
 from mcp_server.diagnostics import register_diagnostics
 from mcp_server.prompts import register_prompts
@@ -109,18 +110,8 @@ def create_server(
         instructions=SERVER_INSTRUCTIONS,
         website_url="https://github.com/hybridindie/godot-mcp",
         # The dynamic fields (toolset_count / prompts / resources) are filled in
-        # from the live registry after registration; see _apply_capabilities below.
-        experimental_capabilities={
-            "godot_mcp": {
-                "version": "2026.06.01",
-                "min_godot": "4.4",
-                "docs": {
-                    "tutorial": "https://github.com/hybridindie/godot-mcp/blob/main/TUTORIAL.md",
-                    "tool_contracts": "https://github.com/hybridindie/godot-mcp/blob/main/docs/tool-contracts.md",
-                    "architecture": "https://github.com/hybridindie/godot-mcp/blob/main/docs/architecture.md",
-                },
-            }
-        },
+        # from the live registry after registration; see capabilities.apply_capability.
+        experimental_capabilities={"godot_mcp": dict(STATIC_CAPABILITY)},
     )
     # Background-tasks spike (issue #315): register the in-process TasksExtension
     # so tools marked ``task=True`` can return a handle immediately instead of
@@ -189,23 +180,7 @@ def create_server(
     apply_safety_annotations(mcp)
 
     # Fill the capabilities snapshot from the live registry so it can never drift
-    # from the real toolset / prompt / resource catalog (issue #231).
-    _apply_capabilities(mcp, manager, prompt_names, resource_uris)
+    # from the real toolset / prompt / resource catalog (issue #231/#233).
+    apply_capability(mcp, manager, prompt_names, resource_uris)
 
     return mcp
-
-
-def _apply_capabilities(
-    mcp: FastMCP, manager: ToolsetManager, prompts: list[str], resources: list[str]
-) -> None:
-    """Derive the dynamic ``experimental_capabilities`` fields from the live registry.
-
-    ``toolset_count`` comes from ``manager.status()`` (the gated toolsets plus the
-    always-on ``core`` toolset — everything ``list_toolsets`` reports); ``prompts``
-    and ``resources`` are the names the registration functions report, so the
-    snapshot tracks the catalog without introspecting FastMCP internals (#231/#233).
-    """
-    caps = mcp.experimental_capabilities["godot_mcp"]
-    caps["toolset_count"] = len(manager.status())
-    caps["prompts"] = prompts
-    caps["resources"] = resources
