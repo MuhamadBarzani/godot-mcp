@@ -70,17 +70,17 @@ def _category(tags: Iterable[str] | None) -> str:
 
 
 def _original_handler_name(tool: Tool) -> str:
-    """Resolve a tool's original handler name, walking ``TransformedTool.parent_tool``.
+    """Resolve a tool's original handler name from its ``fn`` callable.
 
     ``ToolTransformConfig.apply`` wraps each renamed tool in a ``TransformedTool``
     whose ``fn`` is a forwarding closure (``__name__ == "_forward"``); the original
-    handler is reachable via ``parent_tool``. Untransformed tools expose their
-    handler directly on ``fn.__name__``.
+    handler is reachable via ``parent_tool``. Before the transform is applied,
+    tools are untransformed and ``fn.__name__`` is the handler name directly.
     """
-    name: str = getattr(tool, "fn").__name__  # noqa: B009  (FunctionTool.fn, untyped on base Tool)
+    name: str = str(tool.fn.__name__)
     while name == "_forward" and hasattr(tool, "parent_tool"):
-        tool = getattr(tool, "parent_tool")  # noqa: B009  (TransformedTool.parent_tool)
-        name = getattr(tool, "fn").__name__  # noqa: B009  (FunctionTool.fn, untyped on base Tool)
+        tool = tool.parent_tool
+        name = str(tool.fn.__name__)
     return name
 
 

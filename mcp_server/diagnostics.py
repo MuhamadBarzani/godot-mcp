@@ -101,8 +101,7 @@ async def _list_resources(mcp: FastMCP) -> list[str]:
 
 async def _fetch_bridge_diagnostics(bridge: Bridge) -> BridgeDiagnostics:
     """Snapshot the bridge state and, if connected, query Godot for version/project."""
-    url = getattr(bridge, "_config", None)
-    url_str = str(url.url) if url else "ws://localhost:9080"
+    url_str = bridge.url
     if not bridge.connected:
         return BridgeDiagnostics(
             connected=False,

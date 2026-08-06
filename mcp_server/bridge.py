@@ -107,6 +107,10 @@ class Bridge:
     def connected(self) -> bool:
         return self._conn is not None
 
+    @property
+    def url(self) -> str:
+        return self._config.url
+
     async def serve(self) -> None:
         """Start listening for the addon to connect (it is the client now). Idempotent.
 
