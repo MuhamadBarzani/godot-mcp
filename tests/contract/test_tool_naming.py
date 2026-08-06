@@ -11,7 +11,7 @@ from fastmcp.server.providers.base import Provider
 
 from mcp_server.categories import CORE_TAG
 from mcp_server.config import ServerConfig
-from mcp_server.server import create_server
+from mcp_server.server import create_server, register_tool_transform
 from mcp_server.transforms import _category, _original_handler_name, godot_tool_name
 
 pytestmark = pytest.mark.asyncio
@@ -19,6 +19,7 @@ pytestmark = pytest.mark.asyncio
 
 async def test_every_tool_is_godot_named_and_consistent() -> None:
     mcp = create_server(ServerConfig())
+    await register_tool_transform(mcp)
     # Provider.list_tools applies the server-level ToolTransform (which renames
     # every tool to its godot_ form) but skips the enabled filter, so ALL
     # registered tools — including toolset-gated ones — are visible here.

@@ -14,7 +14,7 @@ from fastmcp.server.providers.base import Provider
 
 from mcp_server.bridge import Bridge
 from mcp_server.config import ServerConfig
-from mcp_server.server import create_server
+from mcp_server.server import create_server, register_tool_transform
 from mcp_server.transforms import _original_handler_name, godot_tool_name
 from tests.fakes import FakeAddonConnection, connector_for, make_addon_responder
 
@@ -30,6 +30,7 @@ def _build() -> FastMCP:
 
 async def test_every_public_tool_is_godot_named() -> None:
     server = _build()
+    await register_tool_transform(server)
     # Provider.list_tools applies server-level transforms (the ToolTransform)
     # but skips the enabled filter, so ALL registered tools are visible here —
     # including toolset-gated ones — with their public godot_ names.

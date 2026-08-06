@@ -15,7 +15,7 @@ installed.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from fastmcp.server.transforms import ToolTransform
@@ -103,48 +103,23 @@ def godot_tool_name(func_name: str, tags: Iterable[str] | None) -> str:
     return f"{PREFIX}{cat}_{action}"
 
 
-def godot_tool_transform(mcp: Any) -> ToolTransform:
+async def godot_tool_transform(mcp: Any) -> ToolTransform:
     """Build a ``ToolTransform`` exposing each tool as ``godot_<toolset>_<action>``.
 
-    Reads the registered tools synchronously from the server's local provider
-    (``create_server`` is sync, so the async ``_list_tools`` isn't available) and
-    builds the rename map + its reverse in one pass. Call after every
-    ``register_*`` so the map covers the whole surface.
+    Reads the registered tools via the public async ``mcp.local_provider.list_tools()``
+    and builds the rename map + its reverse in one pass. Call after every
+    ``register_*`` so the map covers the whole surface. Must be called from an
+    async context (e.g. inside the server lifespan).
     """
-    tools = _registered_tools(mcp)
+    tools = await mcp.local_provider.list_tools()
     transforms: dict[str, ToolTransformConfig] = {}
     for tool in tools:
-        public = godot_tool_name(getattr(tool, "fn").__name__, tool.tags)  # noqa: B009  (FunctionTool.fn, untyped on base Tool)
+        public = godot_tool_name(
+            _original_handler_name(tool), tool.tags
+        )
         if public != tool.name:
             transforms[tool.name] = ToolTransformConfig(name=public)
     return ToolTransform(transforms)
-
-
-def _registered_tools(mcp: Any) -> Sequence[Tool]:
-    """Synchronously read the tools registered on the server's local provider.
-
-    ``FastMCP.local_provider.list_tools()`` is async, but ``create_server`` is
-    sync and the transform must be registered before any client connects. The
-    local provider's ``_components`` dict is populated synchronously by the
-    ``register_*`` calls, so this reads it without an event loop.
-
-    **Known fragility:** ``_components`` is a private attribute of
-    ``LocalProvider`` and may change in future FastMCP releases. If it breaks,
-    the fallback is to move ``godot_tool_transform(mcp)`` into the async lifespan
-    (where ``await mcp.local_provider.list_tools()`` is available) and register
-    the transform there. The current approach is chosen because the transform
-    must be in place before the first ``list_tools`` call, which happens during
-    client initialization — the lifespan runs *after* the server object is built
-    but *before* any client connects, so the sync read is safe today.
-    """
-    from fastmcp.tools.base import Tool
-
-    tools: list[Tool] = []
-    for provider in mcp.providers:
-        for component in provider._components.values():
-            if isinstance(component, Tool):
-                tools.append(component)
-    return tools
 
 
 __all__ = ["godot_tool_name", "godot_tool_transform"]

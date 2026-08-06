@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-from mcp_server.server import create_server
+from mcp_server.server import create_server, register_tool_transform
 from tests.helpers import list_all_tools
 
 # Every tool that takes a polymorphic ``value: Any``.
@@ -30,6 +30,7 @@ REQUIRED_MARKERS = ("Vector2", "Color", "NodePath")
 
 def test_value_setters_document_accepted_shapes() -> None:
     server = create_server()
+    asyncio.run(register_tool_transform(server))
     tools = {t.name: t for t in asyncio.run(list_all_tools(server))}
 
     missing_tools = VALUE_SETTERS - set(tools)

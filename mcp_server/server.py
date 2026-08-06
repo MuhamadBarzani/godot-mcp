@@ -68,6 +68,15 @@ from mcp_server.toolset_protocol import SERVER_INSTRUCTIONS
 from mcp_server.toolsets import ToolsetManager, register_toolset_tools
 from mcp_server.transforms import godot_tool_transform
 
+
+async def register_tool_transform(mcp: FastMCP) -> None:
+    """Register the ``godot_`` naming transform on the server.
+
+    Normally called inside the server lifespan. Tests that need the transform
+    without running the lifespan can call this directly.
+    """
+    mcp.add_transform(await godot_tool_transform(mcp))
+
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "godot-mcp"
@@ -107,6 +116,10 @@ def create_server(
             await apply_safety_annotations(mcp)
         except Exception:
             logger.warning("failed to apply safety annotations", exc_info=True)
+        try:
+            mcp.add_transform(await godot_tool_transform(mcp))
+        except Exception:
+            logger.warning("failed to register tool transform", exc_info=True)
         try:
             yield
         finally:
@@ -204,9 +217,8 @@ def create_server(
 
     # Expose every tool as godot_<toolset>_<action> (issue #312). FastMCP 4.0's
     # ToolTransform renames tools as they flow to clients and reverse-maps public
-    # names to the original handler on call_tool. Built after every register_*
-    # so the rename map (and its reverse) cover the whole surface.
-    mcp.add_transform(godot_tool_transform(mcp))
+    # names to the original handler on call_tool. Registered inside the async
+    # lifespan (see above) so the public list_tools() API is available.
 
     # Fill the capabilities snapshot from the live registry so it can never drift
     # from the real toolset / prompt / resource catalog (issue #231/#233).

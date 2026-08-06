@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from mcp_server.server import create_server
+from mcp_server.server import create_server, register_tool_transform
 from tests.helpers import list_all_tools
 
 # Tool-call-shaped references in skill bodies, e.g. ``godot_runtime_play_scene(``.
@@ -86,6 +86,7 @@ def test_skill_tool_references_exist() -> None:
     or imagined tool), which would silently fail at call time.
     """
     server: Any = create_server()
+    asyncio.run(register_tool_transform(server))
     tool_names = {t.name for t in asyncio.run(list_all_tools(server))}
     unknown: dict[str, set[str]] = {}
     for skill in _skill_dirs():

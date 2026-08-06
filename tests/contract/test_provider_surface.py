@@ -16,7 +16,7 @@ import pytest
 from fastmcp import Client
 
 from mcp_server.config import ServerConfig
-from mcp_server.server import create_server
+from mcp_server.server import create_server, register_tool_transform
 from tests.helpers import list_all_tools
 
 _SOURCE_FILES = [
@@ -61,6 +61,7 @@ def test_no_getattr_components_shim_in_source() -> None:
 async def test_list_all_tools_includes_disabled() -> None:
     """The public helper returns the full set, not just the enabled subset."""
     mcp = create_server(ServerConfig())
+    await register_tool_transform(mcp)
     all_tools = await list_all_tools(mcp)
     async with Client(mcp, mode="legacy") as client:
         enabled = await client.list_tools()
