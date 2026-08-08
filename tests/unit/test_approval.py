@@ -8,8 +8,12 @@ poster is injected, so this is a pure unit test — no network.
 
 from __future__ import annotations
 
-import pytest
+import json
 
+import pytest
+from mcp.types import ElicitRequestFormParams
+
+from mcp_server.approval_middleware import APPROVE_KEY, _build_input_required
 from mcp_server.config import ServerConfig
 from mcp_server.models.approval import ApprovalRequest, ApprovalResponse
 from mcp_server.safety import (
@@ -108,6 +112,13 @@ async def test_from_config_reads_fields() -> None:
     assert gate.webhook_url == "http://hook"
     assert gate.timeout == 5.0
     assert gate.fail_open is False
+    assert gate.require_approval is False
+
+
+async def test_from_config_reads_require_approval() -> None:
+    config = ServerConfig(approval_require=True)
+    gate = ApprovalGate.from_config(config)
+    assert gate.require_approval is True
 
 
 async def test_from_config_without_webhook_is_noop() -> None:
@@ -140,3 +151,44 @@ async def test_malformed_response_denies_even_when_fail_open() -> None:
             action="godot_scene_edit_delete_node", safety_class="destructive", params={}
         )
     assert exc.value.error == "APPROVAL_DENIED"
+
+
+# --- guard pattern (issue #346) -------------------------------------------
+
+
+async def test_build_input_required_request_state_carries_tool_and_params() -> None:
+    # The durable round-trip depends on InputRequiredResult.request_state carrying
+    # the tool name, safety_class, and params so a stateless client can re-call
+    # the tool with the decision on the next round (issue #346).
+    result = _build_input_required(
+        "godot_scene_edit_create_node",
+        "mutating",
+        {"parent_path": ".", "node_type": "Node2D", "node_name": "Player"},
+    )
+    state = result.input_required.request_state
+    assert state is not None  # narrowed for mypy
+    payload = json.loads(state)
+    assert payload["tool"] == "godot_scene_edit_create_node"
+    assert payload["safety_class"] == "mutating"
+    assert payload["params"] == {
+        "parent_path": ".",
+        "node_type": "Node2D",
+        "node_name": "Player",
+    }
+
+
+async def test_build_input_required_elicitation_asks_approve() -> None:
+    # The elicitation request under APPROVE_KEY carries a yes/no schema the
+    # client renders; its answer arrives in ctx.input_responses[APPROVE_KEY].
+    result = _build_input_required(
+        "godot_scene_edit_delete_node", "destructive", {"node_path": "Enemy"}
+    )
+    requests = result.input_required.input_requests
+    assert requests is not None  # narrowed for mypy
+    request = requests[APPROVE_KEY]
+    params = request.params
+    assert isinstance(params, ElicitRequestFormParams)  # form-mode elicitation
+    # The schema requires a single boolean "approve" field.
+    schema = params.requested_schema
+    assert schema["properties"]["approve"]["type"] == "boolean"
+    assert schema["required"] == ["approve"]
