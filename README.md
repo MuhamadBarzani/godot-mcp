@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="godot/addons/godot_mcp/icon.svg" width="128" alt="Godot MCP icon" />
+  <img src="godot/addons/godot_mcp/icon.png" width="128" alt="Godot MCP icon" />
 </p>
 
 <h1 align="center">godot-mcp</h1>
