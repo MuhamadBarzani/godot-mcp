@@ -94,14 +94,30 @@ uv run godot-editor-mcp --help
 
 ### Install the Godot addon
 
+**Option A: Download from GitHub releases** (no clone needed)
+
 ```bash
-# Copy the addon into your Godot project's addons/ folder
+# Download the addon zip from the latest release
+curl -L -o godot_mcp_addon.zip \
+  https://github.com/hybridindie/godot-mcp/releases/latest/download/godot_mcp_addon.zip
+
+# Extract into your Godot project (it contains addons/godot_mcp/)
+unzip godot_mcp_addon.zip -d /path/to/your/project/
+```
+
+**Option B: From the Godot Asset Library**
+
+Open Godot → **Editor → Manage Editor Features → Asset Library** → search for "Godot MCP" → **Install**.
+
+**Option C: Copy from a source clone**
+
+```bash
 cp -r godot/addons/godot_mcp /path/to/your/project/addons/
 ```
 
-Then in Godot: **Project → Project Settings → Plugins → godot_mcp → Enable**.
+After installing via any method, enable it: **Project → Project Settings → Plugins → Godot MCP → Enable**.
 
-A status dock appears (bottom panel). It shows connection state, project name, active scene, and selected node. The addon connects out to the MCP server's bridge listener (`ws://127.0.0.1:9080` by default) and reconnects automatically — so editor and server can start in either order.
+A status panel appears at the bottom of the editor (alongside Output and Debug). It shows connection state (color dot), server/Godot version, bridge URL, active scene, selected node, enabled toolsets, and a recent-command log with timing stats. The addon connects out to the MCP server's bridge listener (`ws://127.0.0.1:9080` by default) and reconnects automatically — so editor and server can start in either order.
 
 ### 3. Configure your MCP client
 

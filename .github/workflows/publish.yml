@@ -32,6 +32,14 @@ jobs:
       - name: Build package
         run: uv build
 
+      - name: Build Godot addon zip
+        run: |
+          # Create a zip containing only the addons/godot_mcp/ directory,
+          # structured so it extracts into the project root (addons/godot_mcp/...).
+          # This is the format Godot's Asset Library and manual install expect.
+          cd godot
+          zip -r ../dist/godot_mcp_addon.zip addons/godot_mcp/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -75,8 +83,48 @@ jobs:
       - name: Upload to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/godot_mcp_addon.zip
           tag_name: ${{ github.event.release.tag_name || inputs.tag }}
+
+  publish-assetlib:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read  # download-artifact
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to Godot Asset Library
+        env:
+          ASSETLIB_TOKEN: ${{ secrets.GODOT_ASSETLIB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$ASSETLIB_TOKEN" ]; then
+            echo "GODOT_ASSETLIB_TOKEN not set — skipping Asset Library publish"
+            exit 0
+          fi
+          # Submit the addon zip to the Godot Asset Library API.
+          # https://godotengine.org/asset-library/api
+          # The asset must be pre-registered at https://godotengine.org/asset-library
+          # with edit access for this token.
+          VERSION="$TAG"
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/godot_mcp_addon.zip"
+          curl -s -X POST "https://godotengine.org/asset-library/api/asset/edit" \
+            -H "Authorization: Bearer $ASSETLIB_TOKEN" \
+            -F "asset_id=YOUR_ASSET_ID" \
+            -F "version=$VERSION" \
+            -F "download_url=$DOWNLOAD_URL" \
+            -F "browse_url=https://github.com/${{ github.repository }}" \
+            -F "icon_url=https://raw.githubusercontent.com/${{ github.repository }}/main/godot/addons/godot_mcp/icon.svg" \
+            -F "category=2" \
+            -F "godot_version=4.4"
 
   publish-docker:
     needs: build
