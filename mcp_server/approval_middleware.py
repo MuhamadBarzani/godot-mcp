@@ -113,8 +113,17 @@ class ApprovalMiddleware(Middleware):
         except ToolError:
             return await call_next(context)
         except Exception:
-            logger.warning(
-                "unexpected error looking up tool %r; skipping approval gate",
+            # Fail-open here (not fail-closed) so the agent can still reach core
+            # recovery tools (godot_list_toolsets, godot_enable_toolset) when an
+            # internal lookup error occurs. The destructive ``confirm`` gate
+            # lives in each tool's body via ``require_confirmation`` — that is
+            # the primary security gate and runs regardless of this lookup, so
+            # fail-open here does not leave destructive tools unprotected. The
+            # toolset middleware fails open for the same reason (issue #369).
+            logger.error(
+                "unexpected error looking up tool %r; allowing call (approval "
+                "gate fails open — the tool's own confirm gate still protects "
+                "destructive tools)",
                 context.message.name,
                 exc_info=True,
             )
