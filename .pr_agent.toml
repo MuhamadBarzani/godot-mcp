@@ -1,19 +1,9 @@
 # Repo config for the self-hosted PR reviewer (The-PR-Agent / k3s-qodo-pr-agent).
 # https://github.com/The-PR-Agent/pr-agent
 #
-# Cluster-side (NOT here): OLLAMA_API_BASE / OLLAMA_API_KEY secrets, and the
-# /improve = manual-only toggle (pr_commands runs /describe + /review on open).
-
-[config]
-# Open-source models on Ollama Cloud only. A/B: trial a larger cloud model as
-# primary (fewer false-positives + better instruction-following) while keeping
-# the fast/cheap qwen3-coder:30b as fallback — if the kimi tag is wrong the
-# primary just fails over to :30b, so reviews never hard-break.
-# Tags must match the cluster/cloud's working litellm "ollama/" strings.
-model = "openai/kimi-k2.7-code-cloud"         # primary (A/B trial — larger, coding-focused)
-fallback_models = ["openai/qwen3-coder-next-local", "openai/qwen3-coder-30b-local"] # fast/cheap fallback (also the safety net)
-model_reasoning = "openai/qwen3-coder:30b"   # self-reflection kept on the fast model (cost/latency)
-model_weak = "openai/gemma4-12b-local"             # cheap model for easy subtasks
+# Cluster-side (NOT here): model config, OLLAMA_API_BASE / OLLAMA_API_KEY secrets,
+# and the /improve = manual-only toggle (pr_commands runs /describe + /review on open).
+# The model is configured on the cluster — no model/fallback settings here.
 
 [pr_reviewer]
 # The diff-only "ticket compliance analysis" mis-fired (marked implemented
