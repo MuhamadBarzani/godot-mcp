@@ -11,7 +11,6 @@ A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotoc
 ## Table of Contents
 
 - [What is this?](#what-is-this)
-- [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
 - [Quick Start](#quick-start)
 - [Setup Guide](#setup-guide)
@@ -29,6 +28,7 @@ A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotoc
 - [All Toolsets](#all-toolsets)
 - [Configuration Reference](#configuration-reference)
 - [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
 - [Repository Layout](#repository-layout)
 - [Contributing](#contributing)
 - [License](#license)
@@ -50,53 +50,6 @@ The server is **game-agnostic** — it knows Godot, not your game. A tower-defen
 
 ---
 
-## Architecture
-
-Every agent action crosses a four-layer chain:
-
-```mermaid
-flowchart TD
-    AI["AI client<br/>Claude Code · OpenCode · Cursor · any stdio MCP client"]
-    SRV["FastMCP server · Python 3.11+ · <code>mcp_server/</code><br/>Pydantic schemas · safety classes · preconditions · no Godot logic"]
-    ADDON["Godot addon · GDScript · <code>godot/addons/godot_mcp/</code><br/>EditorPlugin: WebSocketPeer client (connects out, reconnects) · routes cmd_* envelopes"]
-    PROJ["Live Godot project"]
-    AI -->|"stdio · MCP protocol (JSON-RPC)"| SRV
-    ADDON ==>|"WebSocket connect (editor dials) · ws://127.0.0.1:9080"| SRV
-    SRV -.->|"{id, command, params}"| ADDON
-    ADDON -->|"Godot Editor API"| PROJ
-    ADDON -.->|"{id, ok, result, error, hint}"| SRV
-    SRV -.->|"typed tool result"| AI
-```
-
-The **editor dials** the connection (bold arrow) and reconnects on its own; the **server still drives every command** (dashed `{id, command, …}`). Those two directions are decoupled — the bridge inversion (#276) only changed who connects.
-
-A single tool call — `godot_scene_edit_create_node` — travels the full chain and back:
-
-```mermaid
-sequenceDiagram
-    participant AI as AI client
-    participant SRV as FastMCP server
-    participant ADDON as Godot addon
-    participant GD as Godot editor
-    AI->>SRV: godot_scene_edit_create_node(parent_path, node_type, node_name)
-    Note over SRV: validate typed args ·<br/>check safety class + preconditions
-    SRV->>ADDON: {id, command: "cmd_create_node", params}
-    ADDON->>GD: EditorInterface API (UndoRedo-wrapped)
-    GD-->>ADDON: node created
-    ADDON-->>SRV: {id, ok: true, result: {node_path, created}}
-    SRV-->>AI: CreateNodeResult { node_path, created }
-```
-
-> Solid arrows are the request path (top-down); dashed arrows are the response envelope flowing back up.
-
-The boundary is deliberate and enforced by design rules:
-- **Only the addon touches Godot.** The server has no Godot imports.
-- **Only the server owns safety.** All `dry_run`, `confirm`, and precondition logic lives in Python.
-- **JSON envelopes everywhere.** Commands and responses carry `{id, ok, result, error, hint}` — structured, versioned, and never a Python traceback.
-
-Read [`docs/architecture.md`](docs/architecture.md) for the full bridge contract, envelope spec, and type coercion rules.
-
----
 
 ## Prerequisites
 
@@ -725,6 +678,53 @@ All configuration is optional and passed via environment variables:
 
 ---
 
+## Architecture
+
+Every agent action crosses a four-layer chain:
+
+```mermaid
+flowchart TD
+    AI["AI client<br/>Claude Code · OpenCode · any stdio MCP client"]
+    SRV["FastMCP server · Python 3.11+ · <code>mcp_server/</code><br/>Pydantic schemas · safety classes · preconditions · no Godot logic"]
+    ADDON["Godot addon · GDScript · <code>godot/addons/godot_mcp/</code><br/>EditorPlugin: WebSocketPeer client (connects out, reconnects) · routes cmd_* envelopes"]
+    PROJ["Live Godot project"]
+    AI -->|"stdio · MCP protocol (JSON-RPC)"| SRV
+    ADDON ==>|"WebSocket connect (editor dials) · ws://127.0.0.1:9080"| SRV
+    SRV -.->|"{id, command, params}"| ADDON
+    ADDON -->|"Godot Editor API"| PROJ
+    ADDON -.->|"{id, ok, result, error, hint}"| SRV
+    SRV -.->|"typed tool result"| AI
+```
+
+The **editor dials** the connection (bold arrow) and reconnects on its own; the **server still drives every command** (dashed `{id, command, …}`). Those two directions are decoupled — the bridge inversion (#276) only changed who connects.
+
+A single tool call — `godot_scene_edit_create_node` — travels the full chain and back:
+
+```mermaid
+sequenceDiagram
+    participant AI as AI client
+    participant SRV as FastMCP server
+    participant ADDON as Godot addon
+    participant GD as Godot editor
+    AI->>SRV: godot_scene_edit_create_node(parent_path, node_type, node_name)
+    Note over SRV: validate typed args ·<br/>check safety class + preconditions
+    SRV->>ADDON: {id, command: "cmd_create_node", params}
+    ADDON->>GD: EditorInterface API (UndoRedo-wrapped)
+    GD-->>ADDON: node created
+    ADDON-->>SRV: {id, ok: true, result: {node_path, created}}
+    SRV-->>AI: CreateNodeResult { node_path, created }
+```
+
+> Solid arrows are the request path (top-down); dashed arrows are the response envelope flowing back up.
+
+The boundary is deliberate and enforced by design rules:
+- **Only the addon touches Godot.** The server has no Godot imports.
+- **Only the server owns safety.** All `dry_run`, `confirm`, and precondition logic lives in Python.
+- **JSON envelopes everywhere.** Commands and responses carry `{id, ok, result, error, hint}` — structured, versioned, and never a Python traceback.
+
+Read [`docs/architecture.md`](docs/architecture.md) for the full bridge contract, envelope spec, and type coercion rules.
+
+---
 ## Repository Layout
 
 ```
