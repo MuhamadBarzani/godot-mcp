@@ -147,25 +147,12 @@ A status panel appears at the bottom of the editor (alongside Output and Debug).
 }
 ```
 
-**Claude Code** (`.mcp.json` in project root, or `claude mcp add`):
-
-```json
-{
-  "mcpServers": {
-    "godot": {
-      "command": "uv",
-      "args": ["run", "godot-editor-mcp"]
-    }
-  }
-}
-```
-
-> Both assume the command runs from the repo root (so `uv` resolves this project's environment). Use absolute paths or `--directory` if launching elsewhere.
+> The command runs from the repo root (so `uv` resolves this project's environment). Use absolute paths or `--directory` if launching elsewhere.
 
 ### 4. Start working
 
 1. Open your Godot project and enable the addon.
-2. Start your MCP client (Claude Code, OpenCode, etc.).
+2. Start your MCP client (OpenCode, etc.).
 3. Ask the agent to inspect the project:
    - *"Show me the scene tree"* → `godot_inspection_get_scene_tree`
    - *"What node is selected?"* → `godot_inspection_get_selected_node`
@@ -235,7 +222,7 @@ The server exposes two transports:
 
 | Transport | Use case | How to connect |
 |-----------|----------|----------------|
-| `stdio` | A single local agent (Claude Code, OpenCode) | `uv run godot-editor-mcp` |
+| `stdio` | A single local agent (OpenCode) | `uv run godot-editor-mcp` |
 | `http` | Shared service; remote or web-based clients | `scripts/serve-http.sh` |
 
 `stdio` is the default and what most AI coding assistants expect: the client
@@ -243,7 +230,7 @@ spawns its own server subprocess and they speak JSON-RPC over stdin/stdout.
 
 **Service mode (one server, many clients).** The bridge to the editor is a
 single connection — only one server process can own it at a time. So when you
-want **several** clients on the same live editor (e.g. Claude Code *and* the
+want **several** clients on the same live editor (e.g. OpenCode *and* the
 [godot-agents](https://github.com/hybridindie/godot-agents) project), run **one**
 HTTP service and have every client connect to it instead of each spawning its own:
 
@@ -252,7 +239,7 @@ scripts/serve-http.sh            # http://127.0.0.1:9090/mcp  + editor bridge :9
 ```
 
 Clients then point at `http://127.0.0.1:9090/mcp` (FastMCP's Streamable HTTP
-mount). Claude Code, via `.mcp.json`:
+mount). OpenCode, via `opencode.json`:
 
 ```json
 { "mcpServers": { "godot": { "type": "http", "url": "http://127.0.0.1:9090/mcp" } } }
@@ -288,7 +275,7 @@ docker run -d -p 9090:9090 -p 9080:9080 \
   -e GODOT_MCP_AUTH_TOKEN=$TOKEN \
   ghcr.io/hybridindie/godot-mcp:latest
 
-# Client (Claude Code .mcp.json):
+# Client (OpenCode opencode.json):
 # { "mcpServers": { "godot": { "type": "http", "url": "http://127.0.0.1:9090/mcp", "auth": "<TOKEN>" } } }
 ```
 
@@ -464,7 +451,7 @@ export_project(preset="Web", output_path="builds/web")
 
 Beyond the tool surface, two layers help an agent drive the server well:
 
-- **MCP prompts** — step-numbered workflow recipes the server exposes over MCP. Clients that surface prompts (Claude Code, etc.) show them as slash commands, e.g. `/mcp__godot-mcp__build_scene`. Shipped: `toolset_discovery`, `build_scene`, `play_test`, `script_edit`, `debug_scene`, `troubleshoot`, `author_resource`, `export_build`, `batch_refactor`. Discover with `list_prompts()`; render with `render_prompt(name, arguments={...})`.
+- **MCP prompts** — step-numbered workflow recipes the server exposes over MCP. Clients that surface prompts (etc.) show them as slash commands, e.g. `/mcp__godot-mcp__build_scene`. Shipped: `toolset_discovery`, `build_scene`, `play_test`, `script_edit`, `debug_scene`, `troubleshoot`, `author_resource`, `export_build`, `batch_refactor`. Discover with `list_prompts()`; render with `render_prompt(name, arguments={...})`.
 - **AI skills** ([`skills/`](skills/README.md)) — optional, client-agnostic. Unlike prompts, a skill *auto-triggers* when the agent recognizes a matching task (no slash command), then routes to the prompts and tools. Install with `./scripts/install-skills.sh` (opencode, Claude, or custom target). Shipped: `godot-getting-started`, `godot-playtest-and-debug`, `godot-expert` (engine knowledge + 7 reference guides).
 
 Both stay pure to the generic Godot surface — no game-specific vocabulary.
@@ -719,7 +706,7 @@ Every agent action crosses a four-layer chain:
 
 ```mermaid
 flowchart TD
-    AI["AI client<br/>Claude Code · OpenCode · any stdio MCP client"]
+    AI["AI client<br/>OpenCode · any stdio MCP client"]
     SRV["FastMCP server · Python 3.11+ · <code>mcp_server/</code><br/>Pydantic schemas · safety classes · preconditions · no Godot logic"]
     ADDON["Godot addon · GDScript · <code>godot/addons/godot_mcp/</code><br/>EditorPlugin: WebSocketPeer client (connects out, reconnects) · routes cmd_* envelopes"]
     PROJ["Live Godot project"]
@@ -769,7 +756,7 @@ godot-mcp/
 ├── README.md               # This file
 ├── LICENSE                 # MIT
 ├── pyproject.toml          # Package config (godot-editor-mcp)
-├── .mcp.json               # Claude Code client config
+
 ├── .env.example            # End-user env template
 ├── .env.dev.example        # Developer env template (graphify + opencode)
 │

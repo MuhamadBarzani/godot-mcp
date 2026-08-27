@@ -18,7 +18,7 @@ Install them once and your agent has the right guidance at the right time.
 ### Prerequisites
 
 - A clone of this repo
-- An AI client that supports skills (opencode, Claude Code, etc.)
+- An AI client that supports skills (opencode, etc.)
 
 ### One-command install
 
@@ -26,7 +26,7 @@ Install them once and your agent has the right guidance at the right time.
 # opencode (default — symlinks into ~/.config/opencode/skills/):
 ./scripts/install-skills.sh
 
-# Claude Code:
+# Claude / other clients:
 ./scripts/install-skills.sh --target ~/.claude/skills
 
 # Any client with a custom skill path:
