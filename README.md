@@ -277,12 +277,23 @@ mount). Claude Code, via `.mcp.json`:
 ```
 
 For non-loopback binds (e.g. Docker's `0.0.0.0`), set `GODOT_MCP_AUTH_TOKEN` to a
-bearer token — the server refuses to start without one, and clients pass it as
-`auth`:
+bearer token. This prevents unauthorized access — when the server binds an
+interface reachable from other machines, anyone on the network could send MCP
+commands to the Godot editor without it. The server refuses to start on a
+non-loopback bind without a token ([#226](https://github.com/hybridindie/godot-mcp/issues/226)).
+Generate any random string and set it as the token; clients pass it as `auth`:
+
+```bash
+# Generate a token
+TOKEN=$(openssl rand -hex 32)
+```
 
 ```json
 { "mcpServers": { "godot": { "type": "http", "url": "http://0.0.0.0:9090/mcp", "auth": "<token>" } } }
 ```
+
+> **Local stdio mode** (the default `pip install` path) does not need a token —
+> it only applies to HTTP transport on non-loopback binds.
 
 ---
 
