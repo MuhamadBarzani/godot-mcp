@@ -295,6 +295,25 @@ TOKEN=$(openssl rand -hex 32)
 > **Local stdio mode** (the default `pip install` path) does not need a token —
 > it only applies to HTTP transport on non-loopback binds.
 
+**Docker client setup.** When running the server in Docker, the server binds
+`0.0.0.0` inside the container, so a token is required. Set it on the server,
+then pass the same token to the client:
+
+```bash
+# Server: set the token
+TOKEN=$(openssl rand -hex 32)
+docker run -d -p 9090:9090 -p 9080:9080 \
+  -e GODOT_MCP_AUTH_TOKEN=$TOKEN \
+  ghcr.io/hybridindie/godot-mcp:latest
+
+# Client (Claude Code .mcp.json):
+# { "mcpServers": { "godot": { "type": "http", "url": "http://127.0.0.1:9090/mcp", "auth": "<TOKEN>" } } }
+```
+
+The Godot editor addon also needs to know where to connect. Set
+`GODOT_MCP_BRIDGE_URL` in the editor's environment or project settings to point
+at the host's bridge port (default `ws://127.0.0.1:9080`):
+
 ---
 
 ## Using godot-mcp
