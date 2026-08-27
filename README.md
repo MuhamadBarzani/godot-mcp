@@ -2,7 +2,7 @@
 
 A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for **AI-driven Godot development**. An AI agent (Claude Code, OpenCode, or any stdio MCP client) connects to a live Godot 4.4+ editor and controls it programmatically — inspecting scenes, editing nodes, writing scripts, running the game, and exporting builds — all through a typed, structured API with no built-in game vocabulary.
 
-> **Status:** feature-complete across the planned ecosystem. **175 tools** across **29 categories** — always-on `core` plus 28 toggleable toolsets, of which only `inspection` is enabled by default (the other 27 are gated off). Every capability is documented, tested, and ready for agent use.
+> **Status:** feature-complete across the planned ecosystem. **180 tools** across **29 categories** — always-on `core` plus 28 toggleable toolsets, of which only `inspection` is enabled by default (the other 27 are gated off). Every capability is documented, tested, and ready for agent use.
 >
 > **Package:** `godot-editor-mcp` on [PyPI](https://pypi.org/project/godot-editor-mcp/) · **Docker:** `ghcr.io/hybridindie/godot-mcp` · **Version:** `2026.08.26b1` (beta)
 
@@ -273,7 +273,7 @@ at the host's bridge port (default `ws://127.0.0.1:9080`):
 
 ### Toolsets and the Gated Surface
 
-With 175 tools, showing everything at once would overwhelm an agent's context window and degrade tool selection. So tools are **grouped into toolsets** and most are **gated off by default**.
+With 180 tools, showing everything at once would overwhelm an agent's context window and degrade tool selection. So tools are **grouped into toolsets** and most are **gated off by default**.
 
 **Always exposed:**
 - `core` — diagnostics, toolset management, safety introspection
@@ -491,7 +491,7 @@ Some tools inspect or drive a **running** game (not the editor). This requires t
 
 ## All Toolsets
 
-The full surface is 175 tools across 29 categories (`core` + 28 toggleable toolsets). Below is a summary; the authoritative per-tool spec is in [`docs/tool-contracts.md`](docs/tool-contracts.md).
+The full surface is 180 tools across 29 categories (`core` + 28 toggleable toolsets). Below is a summary; the authoritative per-tool spec is in [`docs/tool-contracts.md`](docs/tool-contracts.md).
 
 ### Core (always on)
 - `godot_health_check` — server version + bridge state
@@ -517,7 +517,7 @@ The full surface is 175 tools across 29 categories (`core` + 28 toggleable tools
 - **Scripts:** `godot_scene_edit_attach_script`
 - **Signals:** `godot_scene_edit_connect_signal`, `godot_scene_edit_disconnect_signal`, `godot_scene_edit_list_signal_connections`
 - **Groups:** `godot_scene_edit_add_to_group`, `godot_scene_edit_remove_from_group`
-- **Scene I/O:** `godot_scene_edit_save_scene`, `godot_scene_edit_create_scene`
+- **Scene I/O:** `godot_scene_edit_save_scene`, `godot_scene_edit_create_scene`, `godot_scene_edit_close_scene` (destructive, needs `confirm`)
 - **Session:** `godot_scene_edit_open_scene`, `godot_scene_edit_reload_scene` (destructive), `godot_scene_edit_save_all_scenes`, `godot_scene_edit_list_open_scenes`, `godot_scene_edit_select_nodes`
 
 ### Scripts (gated) — `read_only` / `mutating`
@@ -579,7 +579,13 @@ The full surface is 175 tools across 29 categories (`core` + 28 toggleable tools
 - `godot_input_get_stats`, `godot_input_record`, `godot_input_stop_recording`
 
 ### Testing / QA (gated) — `runtime` / `read_only`
-- `godot_testing_assert_node_state`, `godot_testing_run_test_scenario`, `godot_testing_run_stress_test`, `godot_testing_compare_screenshots`
+- `godot_testing_run_tests` — run the project's GDScript test suite (GUT) headlessly and return structured pass/fail results
+- `godot_testing_assert_node_state` — assert a live node property against an expected value
+- `godot_testing_run_test_scenario` — play a scene, run an input sequence, evaluate assertions
+- `godot_testing_run_stress_test` — fuzz the running game with random input
+- `godot_testing_compare_screenshots` — per-pixel diff of two base64 PNGs
+
+> **GUT dependency:** `godot_testing_run_tests` requires [GUT](https://github.com/bitwes/Gut) (Godot Unit Test) installed in the project at `addons/gut/`. If GUT is not installed, the tool returns `framework_absent=true` (a normal outcome, not an error) so the agent can fall back to `godot_scripts_get_parse_errors` or `godot_runtime_run_and_capture` for a smoke check. GUT 9.3–9.7+ output is supported.
 
 ### Profiling (gated) — `read_only`
 - `godot_profiling_get_editor_performance` — editor process monitors
