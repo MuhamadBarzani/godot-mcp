@@ -1,8 +1,10 @@
 # godot-mcp
 
-A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for **AI-driven Godot development**. An AI agent (Claude Code, OpenCode, Cursor, or any stdio MCP client) connects to a live Godot 4.4+ editor and controls it programmatically — inspecting scenes, editing nodes, writing scripts, running the game, and exporting builds — all through a typed, structured API with no built-in game vocabulary.
+A **generic, game-agnostic** [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server for **AI-driven Godot development**. An AI agent (Claude Code, OpenCode, or any stdio MCP client) connects to a live Godot 4.4+ editor and controls it programmatically — inspecting scenes, editing nodes, writing scripts, running the game, and exporting builds — all through a typed, structured API with no built-in game vocabulary.
 
 > **Status:** feature-complete across the planned ecosystem. **175 tools** across **29 categories** — always-on `core` plus 28 toggleable toolsets, of which only `inspection` is enabled by default (the other 27 are gated off). Every capability is documented, tested, and ready for agent use.
+>
+> **Package:** `godot-editor-mcp` on [PyPI](https://pypi.org/project/godot-editor-mcp/) · **Docker:** `ghcr.io/hybridindie/godot-mcp` · **Version:** `2026.08.26b1` (beta)
 
 ---
 
@@ -111,20 +113,33 @@ Read [`docs/architecture.md`](docs/architecture.md) for the full bridge contract
 
 ## Quick Start
 
-### 1. Install the MCP server
+### Option A: Install from PyPI
 
 ```bash
-# Clone or navigate to the repo
-cd godot-mcp
-
-# Create venv and install everything (runtime + dev)
-uv sync
-
-# Verify it works
-uv run godot-mcp --help
+pip install godot-editor-mcp --pre
+godot-editor-mcp  # starts the MCP server (stdio mode)
 ```
 
-### 2. Install the Godot addon
+### Option B: Run with Docker
+
+```bash
+docker pull ghcr.io/hybridindie/godot-mcp:latest
+docker run -d -p 9090:9090 -p 9080:9080 \
+  -e GODOT_MCP_AUTH_TOKEN=your-token \
+  ghcr.io/hybridindie/godot-mcp:latest
+```
+
+The server listens on `http://localhost:9090` (MCP HTTP) and `ws://localhost:9080` (bridge).
+
+### Option C: From source (development)
+
+```bash
+cd godot-mcp
+uv sync
+uv run godot-editor-mcp --help
+```
+
+### Install the Godot addon
 
 ```bash
 # Copy the addon into your Godot project's addons/ folder
@@ -144,7 +159,7 @@ A status dock appears (bottom panel). It shows connection state, project name, a
   "mcp": {
     "godot": {
       "type": "local",
-      "command": ["uv", "run", "godot-mcp"]
+      "command": ["uv", "run", "godot-editor-mcp"]
     }
   }
 }
@@ -157,7 +172,7 @@ A status dock appears (bottom panel). It shows connection state, project name, a
   "mcpServers": {
     "godot": {
       "command": "uv",
-      "args": ["run", "godot-mcp"]
+      "args": ["run", "godot-editor-mcp"]
     }
   }
 }
@@ -197,8 +212,8 @@ uv run ruff check .
 uv run mypy
 
 # Run the server manually
-uv run godot-mcp                 # stdio mode (default)
-GODOT_MCP_TRANSPORT=http uv run godot-mcp   # HTTP mode on 127.0.0.1:9090
+uv run godot-editor-mcp                 # stdio mode (default)
+GODOT_MCP_TRANSPORT=http uv run godot-editor-mcp   # HTTP mode on 127.0.0.1:9090
 ```
 
 <details>
@@ -238,7 +253,7 @@ The server exposes two transports:
 
 | Transport | Use case | How to connect |
 |-----------|----------|----------------|
-| `stdio` | A single local agent (Claude Code, OpenCode) | `uv run godot-mcp` |
+| `stdio` | A single local agent (Claude Code, OpenCode) | `uv run godot-editor-mcp` |
 | `http` | Shared service; remote or web-based clients | `scripts/serve-http.sh` |
 
 `stdio` is the default and what most AI coding assistants expect: the client
@@ -655,68 +670,49 @@ All configuration is optional and passed via environment variables:
 ## Repository Layout
 
 ```
-godot/
-  project.godot                  # minimal Godot project (addon is loadable here)
-  addons/godot_mcp/
-    plugin.cfg                   # addon manifest (name, version, Godot 4.4+)
-    godot_mcp.gd                 # EditorPlugin entry: dock, bridge, debugger
-    mcp_bridge.gd                # WebSocketPeer client — connects out, reconnects, receives envelopes
-    command_router.gd            # dispatches cmd_* → Godot API handlers
-    mcp_dock.gd                  # read-only status dock
-    scene_inspect.gd             # JSON-safe scene tree / node serialization
-    type_coerce.gd               # Godot ↔ JSON type coercion
-    mcp_debugger.gd              # EditorDebuggerPlugin (captures godot_mcp channel)
-    mcp_runtime_probe.gd         # game-side autoload for live runtime tools
-
-mcp_server/                      # FastMCP server (Python 3.11+)
-  main.py                        # stdio / Streamable-HTTP entrypoint
-  server.py                      # server factory: bridge + all tool registrations
-  bridge.py                      # async WebSocket listener (id correlation, timeout; the addon dials in)
-  toolsets.py                    # gated toolset system
-  categories.py                  # toolset tag constants
-  safety.py                      # safety classes, preconditions, dry_run/confirm
-  runtime.py                     # headless run / export subprocess
-  qa.py                          # screenshot diff, assertion evaluation
-  analysis.py                    # static analysis (unused resources, circular deps, stats)
-  tools/                         # @mcp.tool() handlers (thin delegation)
-  resources/                     # godot://… read-only resource handlers
-  models/                        # Pydantic typed I/O models
-  prompts/                       # @mcp.prompt() workflow recipes (slash commands)
-
-skills/                          # optional Claude skills (auto-trigger) — see skills/README.md
-
-tests/
-  contract/                      # envelope shapes + tool schemas (fake bridge)
-  integration/                   # live headless-editor e2e (skipped if no Godot)
-  unit/                          # isolated logic tests
-
-docs/
-  architecture.md                # bridge contract, JSON envelope, type coercion
-  tool-contracts.md              # full per-tool spec
+godot-mcp/
+├── AGENTS.md               # Single entry point for AI agents
+├── CONTRIBUTING.md         # Contributor guide
+├── README.md               # This file
+├── LICENSE                 # MIT
+├── pyproject.toml          # Package config (godot-editor-mcp)
+├── .mcp.json               # Claude Code client config
+├── .env.example            # End-user env template
+├── .env.dev.example        # Developer env template (graphify + opencode)
+│
+├── .github/workflows/      # CI, e2e, eval, publish
+├── .opencode/              # opencode config + constitutional rules
+├── .pr_agent.toml          # PR reviewer config
+│
+├── mcp_server/             # FastMCP server (Python 3.11+)
+│   ├── main.py             # stdio / HTTP entrypoint
+│   ├── server.py           # server factory + tool registrations
+│   ├── bridge.py           # async WebSocket listener
+│   ├── safety.py           # safety classes, preconditions, dry_run/confirm
+│   ├── tools/              # @mcp.tool() handlers (thin delegation)
+│   ├── resources/          # godot:// read-only resource handlers
+│   ├── models/             # Pydantic typed I/O models
+│   └── prompts/            # @mcp.prompt() workflow recipes
+│
+├── godot/                  # Godot addon source
+│   ├── addons/godot_mcp/   # EditorPlugin, bridge, dock, cmd_* handlers
+│   └── tests/              # GDScript smoke tests
+│
+├── docs/                   # Architecture, tool-contracts, tutorial
+├── skills/                 # 3 installable AI skills
+├── examples/               # survivors + vampire example games
+├── infra/                  # Docker + K8s deployment
+├── scripts/                # install-skills, graphify, hooks
+│   └── dev/                # One-off dev scripts
+├── tests/                  # Python test suite (contract + integration + unit)
+└── evals/                  # Evaluation harness + results
 ```
 
 ---
 
 ## Contributing
 
-We follow an issue-driven workflow. Read [`CLAUDE.md`](CLAUDE.md) and the path-scoped rules in [`.opencode/rules/`](.opencode/rules/) before writing code.
-
-**The pipeline:**
-1. **Issue** — open a GitHub issue describing the bug or feature
-2. **Failing test** — write a test that pins the desired behavior
-3. **Green code** — implement the minimum change to make the test pass
-4. **Preflight** — run the full suite, ruff, and mypy; confirm zero skips
-5. **PR** — open a PR with `closes #N` in the description
-6. **Merge** — squash merge after review
-
-**Key rules:**
-- Tests come **before** implementation.
-- The suite carries **zero skips** (no `@pytest.mark.skip`, no `xfail`).
-- Safety logic lives in the **server only** (`mcp_server/safety.py`), never in the addon.
-- The addon is the **only** layer that touches Godot.
-- All errors are **structured** — never a Python traceback to the agent.
-- Every mutation in the addon registers with `EditorUndoRedoManager`.
-- Godot types are coerced in `type_coerce.gd`, never inline.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, workflow, conventions, and rules.
 
 ---
 
@@ -728,9 +724,17 @@ We follow an issue-driven workflow. Read [`CLAUDE.md`](CLAUDE.md) and the path-s
 
 ## Resources
 
+- [PyPI package](https://pypi.org/project/godot-editor-mcp/) — `pip install godot-editor-mcp --pre`
+- [Docker image](https://github.com/hybridindie/godot-mcp/pkgs/container/godot-mcp) — `docker pull ghcr.io/hybridindie/godot-mcp:latest`
 - [Model Context Protocol spec](https://modelcontextprotocol.io)
 - [FastMCP docs](https://gofastmcp.com)
 - [Godot 4.4 docs](https://docs.godotengine.org/en/4.4/)
 - [Project issues](https://github.com/hybridindie/godot-mcp/issues)
+- [GitHub releases](https://github.com/hybridindie/godot-mcp/releases)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup, workflow, conventions
+- [`AGENTS.md`](AGENTS.md) — full project context for AI agents
 - [`docs/tool-contracts.md`](docs/tool-contracts.md) — the authoritative per-tool reference
 - [`docs/architecture.md`](docs/architecture.md) — the bridge and envelope contract
+- [`docs/tutorial.md`](docs/tutorial.md) — LLM-prompt tutorial for building a game
+- [`skills/README.md`](skills/README.md) — installable AI skills
+- [`infra/README.md`](infra/README.md) — Docker and K8s deployment
