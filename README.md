@@ -365,6 +365,34 @@ Every tool carries a safety class that determines its risk and required paramete
 
 All safety logic lives in `mcp_server/safety.py` — **never** in the addon.
 
+### Transport Security
+
+The server has two layers of security:
+
+**1. Tool-level safety classes** (above) — gate individual operations with `dry_run`/`confirm` preconditions. These apply in every transport mode.
+
+**2. Transport-level auth** — gates *who can connect* to the server at all:
+
+| Mode | Bind address | Auth required | Why |
+|------|-------------|---------------|-----|
+| `stdio` (default) | N/A (local subprocess) | No | Only the spawning client can talk to it |
+| `http` on loopback | `127.0.0.1` | No | Only local processes can reach it |
+| `http` on non-loopback | `0.0.0.0` / external IP | **Yes** — `GODOT_MCP_AUTH_TOKEN` | Network-accessible; without a token, anyone could write scripts, run the game, or export builds through the editor |
+
+The server **refuses to start** on a non-loopback HTTP bind without `GODOT_MCP_AUTH_TOKEN` set (issue [#226](https://github.com/hybridindie/godot-mcp/issues/226)). This is a fail-fast guard — the error message tells you to set the token or bind loopback.
+
+The token is a bearer token: any random string you choose. The server validates it via `StaticTokenVerifier`; clients pass it as `auth` in their MCP config. Docker deployments always bind `0.0.0.0` inside the container, so the token is required there.
+
+```bash
+# Server: set the token
+docker run -e GODOT_MCP_AUTH_TOKEN=$(openssl rand -hex 32) ...
+
+# Client: pass the same token
+# { "mcpServers": { "godot": { "type": "http", "url": "http://...", "auth": "<token>" } } }
+```
+
+> **Why this matters:** the MCP server can write files, run arbitrary GDScript, execute the Godot binary, and export projects. An unauthenticated network endpoint would let anyone on the LAN do all of that through your editor. The token gate ensures only clients you trust can connect.
+
 ### Version Gating
 
 Some toolsets depend on Godot editor APIs that are only reliable from 4.4 onward:
