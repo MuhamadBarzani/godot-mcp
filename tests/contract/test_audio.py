@@ -17,8 +17,8 @@ pytestmark = pytest.mark.asyncio
 def _responder(cmd: CommandEnvelope) -> ResponseEnvelope | None:
     p = cmd.params
     match cmd.command:
-        case "cmd_get_node_properties":  # require_node_exists precondition
-            return ResponseEnvelope.success(cmd.id, {"node_path": p["node_path"], "type": "Node"})
+        case "cmd_node_exists":  # require_node_exists precondition (issue #365)
+            return ResponseEnvelope.success(cmd.id, {"exists": True})
         case "cmd_add_audio_player":
             return ResponseEnvelope.success(
                 cmd.id,
