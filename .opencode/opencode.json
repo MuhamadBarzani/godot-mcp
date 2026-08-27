@@ -28,6 +28,12 @@
       "url": "https://mcp.context7.com/mcp",
       "enabled": true
     },
+    "graphify": {
+      "type": "local",
+      "command": ["python3", "-m", "graphify.serve"],
+      "enabled": true,
+      "timeout": 10000
+    },
     "mlflow": {
       "type": "local",
       "command": ["uv", "run", "python", "-m", "mlflow.mcp.server"],

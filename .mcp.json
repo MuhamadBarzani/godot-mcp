@@ -4,6 +4,10 @@
       "command": "uv",
       "args": ["run", "godot-editor-mcp"],
       "cwd": "."
+    },
+    "graphify": {
+      "command": "python3",
+      "args": ["-m", "graphify.serve"]
     }
   }
 }
