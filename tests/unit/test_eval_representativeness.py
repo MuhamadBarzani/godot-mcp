@@ -1,72 +1,50 @@
 """Eval representativeness labelling (#197).
 
-The LLM eval agents (OllamaAgent, CloudAgent) execute tool calls by sending
-``cmd_*`` envelopes straight to the addon bridge, bypassing the FastMCP server's
-safety classes, preconditions, dry_run/confirm, approval webhook, and toolset
-gating. Their runs are therefore NOT representative of a server-mediated client.
-Until the path is migrated through the server, runs must be explicitly labelled
-addon-direct / non-representative in their MLflow traces and console output.
+The eval agents (OllamaAgent, CloudAgent) execute tool calls by sending
+``cmd_*`` envelopes straight to the addon bridge, bypassing the FastMCP
+server's safety classes, preconditions, dry_run/confirm, the approval
+webhook, and toolset gating. Their runs are therefore NOT representative
+of a server-mediated client.
+
+The MLflow run-params label moved to godot-agents with the MLflow
+decoupling (#378); the console banner must still prefix every
+``run_llm_suite`` run (both llm_eval_v2 and cross_model_compare) so
+results are never mistaken for server-mediated behaviour.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+import pytest
 
-from evals.mlflow_tracker import EvalTracker
-from evals.representativeness import (
-    EXECUTION_PATH_ADDON_DIRECT,
-    REPRESENTATIVENESS_BANNER,
-    representativeness_params,
-)
+from evals import llm_eval_v2
+from evals.llm_eval_v2 import REPRESENTATIVENESS_BANNER, run_llm_suite
 
 
-def test_representativeness_params_mark_addon_direct() -> None:
-    params = representativeness_params()
-    assert params["execution_path"] == EXECUTION_PATH_ADDON_DIRECT
-    assert params["execution_path"] == "addon_direct"
-    # Machine-readable "not representative" flag, string-valued for MLflow params.
-    assert params["agent_representative"] == "false"
-
-
-def test_banner_warns_it_bypasses_server_safety() -> None:
+def test_banner_text_states_addon_direct_and_non_representative() -> None:
     lowered = REPRESENTATIVENESS_BANNER.lower()
     assert "addon-direct" in lowered
     assert "not" in lowered and "representative" in lowered
 
 
-class _FakeTracker:
-    """Records log_param calls; no-ops the rest of the EvalTracker surface."""
+async def test_run_llm_suite_prefixes_banner(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The banner prefixes the run even when the bridge is unreachable."""
 
-    def __init__(self) -> None:
-        self.params: dict[str, Any] = {}
+    class _DeadBridge:
+        async def connect(self) -> bool:
+            return False
 
-    def start_run(self, run_name: str | None = None, variant: str = "baseline") -> None:
-        return None
-
-    def log_param(self, key: str, value: Any) -> None:
-        self.params[key] = value
-
-    def log_metric(self, key: str, value: float, step: int | None = None) -> None:
-        return None
-
-    def end_run(self, status: str = "FINISHED") -> None:
-        return None
+    monkeypatch.setattr(llm_eval_v2, "BridgeConnector", _DeadBridge)
+    results = await run_llm_suite()
+    assert results == []
+    out = capsys.readouterr().out.lower()
+    assert "addon-direct" in out
+    assert "not representative" in out
 
 
-def test_log_results_labels_run_non_representative(capsys: Any) -> None:
-    from evals.llm_eval_v2 import log_results
-
-    tracker = _FakeTracker()
-    # Empty results still logs run-level params (provider/model/... + labels).
-    log_results(
-        [],
-        variant="t",
-        model="m",
-        provider="anthropic",
-        tracker=cast(EvalTracker, tracker),
-    )
-
-    assert tracker.params["execution_path"] == "addon_direct"
-    assert tracker.params["agent_representative"] == "false"
-    # The non-representativeness is also surfaced in console output.
-    assert "addon-direct" in capsys.readouterr().out.lower()
+def test_banner_has_no_mlflow_coupling() -> None:
+    """The banner is pure console output — no tracker, no MLflow params."""
+    assert isinstance(REPRESENTATIVENESS_BANNER, str)
+    assert not hasattr(llm_eval_v2, "representativeness_params")
+    assert not hasattr(llm_eval_v2, "EvalTracker")
