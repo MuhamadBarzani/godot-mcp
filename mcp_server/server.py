@@ -22,6 +22,7 @@ from fastmcp_tasks import TasksExtension
 from mcp_server.approval_middleware import ApprovalMiddleware
 from mcp_server.bridge import Bridge
 from mcp_server.capabilities import STATIC_CAPABILITY, apply_capability
+from mcp_server.coercion_middleware import ArgumentCoercionMiddleware
 from mcp_server.config import ServerConfig
 from mcp_server.diagnostics import register_diagnostics
 from mcp_server.prompts import register_prompts
@@ -146,6 +147,10 @@ def create_server(
         # from the live registry after registration; see capabilities.apply_capability.
         experimental_capabilities={"godot_mcp": dict(STATIC_CAPABILITY)},
     )
+    # Repair stringified JSON arguments (object/array/scalar params sent as JSON
+    # strings by some client harnesses) before any other middleware or argument
+    # validation sees them — registered first so it runs outermost.
+    mcp.add_middleware(ArgumentCoercionMiddleware())
     # Centralize the webhook ApprovalGate at the tools/call boundary (issue #330).
     # No-op unless a webhook is configured; dry_run short-circuits in the middleware.
     mcp.add_middleware(ApprovalMiddleware(approval))

@@ -85,10 +85,42 @@ def compare_images(a_b64: str, b_b64: str, tolerance: float = 0.0) -> dict[str, 
 
 
 # Comparison operators for assert_node_state, kept explicit (no eval).
+def _normalize_expected(actual: Any, expected: Any) -> Any:
+    """Re-type a *string* ``expected`` to the type of ``actual``.
+
+    Some MCP clients serialize every argument as a string (``"False"``, ``"15"``),
+    which would make a bool/int live value never compare equal. Only the expected
+    side is normalized, and only for unambiguous scalar forms; a string ``actual``
+    is never coerced (string equality stays exact).
+    """
+    if not isinstance(expected, str) or isinstance(actual, str):
+        return expected
+    stripped = expected.strip()
+    if isinstance(actual, bool):
+        low = stripped.lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+        return expected
+    if isinstance(actual, (int, float)):
+        try:
+            value = float(stripped)
+        except ValueError:
+            return expected
+        if value != value or value in (float("inf"), float("-inf")):
+            return expected
+        if isinstance(actual, int) and value.is_integer():
+            return int(value)
+        return value
+    return expected
+
+
 def evaluate_assertion(actual: Any, expected: Any, op: str) -> bool:
     """Evaluate ``actual <op> expected``. Supports ==, !=, <, <=, >, >=, contains, approx
     (float within 1e-6 + relative). Unknown ops return False.
     """
+    expected = _normalize_expected(actual, expected)
     try:
         match op:
             case "==":
