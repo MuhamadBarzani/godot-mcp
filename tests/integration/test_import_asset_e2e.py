@@ -65,8 +65,14 @@ async def _run() -> None:
         assert imported["target_path"] == IMPORTED_PNG
         assert imported["detected_type"] == "Texture2D"
 
-        # Check import status.
-        status = await _ok(bridge, "cmd_get_import_status", {"target_path": IMPORTED_PNG})
+        # Check import status. `cmd_import_asset` only kicks EditorFileSystem.scan()
+        # (async); the .import sidecar appears a few frames later. Poll with a bounded
+        # budget instead of asserting immediately (the inline check raced the scan).
+        for _ in range(20):
+            status = await _ok(bridge, "cmd_get_import_status", {"target_path": IMPORTED_PNG})
+            if status["imported"]:
+                break
+            await asyncio.sleep(0.5)
         assert status["imported"] is True
         # Godot imports a PNG as a CompressedTexture2D (a Texture2D subtype); accept
         # either the base or the concrete imported type.
