@@ -880,7 +880,7 @@ Control breakpoints, step execution, and inspect the paused call stack in a runn
 | `godot_debugger_clear_breakpoints` | — | `ClearBreakpointsResult { breakpoints_cleared }` |
 | `godot_debugger_force_break` | — | `ForceBreakResult { force_break_sent }` |
 
-`godot_debugger_set_breakpoint` uses `EditorDebuggerSession.set_breakpoint(path, line, true)`; `godot_debugger_remove_breakpoint` uses `set_breakpoint(path, line, false)`. `godot_debugger_clear_breakpoints` clears on the game side via the probe (when connected) and removes any individually tracked breakpoints on the editor side. `godot_debugger_force_break` sets `force_break_pending = true` in the probe; the game must call `MCPRuntimeProbe.check_force_break()` in its main loop (see `docs/debugger_feasibility.md` § Limitations).
+`godot_debugger_set_breakpoint` uses `EditorDebuggerSession.set_breakpoint(path, line, true)`; `godot_debugger_remove_breakpoint` uses `set_breakpoint(path, line, false)`. `godot_debugger_clear_breakpoints` clears on the game side via the probe (when connected) and removes any individually tracked breakpoints on the editor side. `godot_debugger_force_break` sets `force_break_pending = true` in the probe; the probe services the flag itself from its own `_process` (calling the `breakpoint` keyword there), so games need no cooperation. `MCPRuntimeProbe.check_force_break()` remains public for games that want the break at a chosen point in their own loop instead (see `docs/debugger_feasibility.md` § Limitations).
 
 **Tier 2 — step control & stack inspection (issue #110 follow-up):**
 

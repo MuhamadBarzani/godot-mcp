@@ -7,8 +7,9 @@ extends Node
 ## addon's MCPDebugger (editor side). It does nothing outside a debug session, so it is
 ## safe to leave enabled (it no-ops in exported/non-debug builds).
 ##
-## Games that want to support force_break should check ``force_break_pending`` in their
-## main loop (e.g. _process) and call the ``breakpoint`` keyword when it is true.
+## The probe self-checks ``force_break`` every frame (see _process), so games
+## need no cooperation; ``check_force_break`` stays public for games that want
+## to break at a chosen point in their own loop instead.
 
 const MAX_DEPTH := 32
 
@@ -230,7 +231,11 @@ var _monitor_error := ""
 
 ## Sample the monitored property once per frame until the requested count is reached,
 ## then push the completed series to the editor (bounded capture — no perpetual stream).
+## Also services force_break: an editor-requested break fires here (one ``breakpoint``
+## inside this frame), so the game needs no cooperation.
 func _process(_delta: float) -> void:
+	if check_force_break():
+		return  # resumed after the break; skip this frame's sample so monitors freeze while paused
 	if _monitor_remaining <= 0:
 		return
 	_monitor_remaining -= 1
