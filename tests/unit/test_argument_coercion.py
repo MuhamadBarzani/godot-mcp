@@ -54,9 +54,7 @@ def test_array_of_objects_param_from_string() -> None:
             }
         }
     }
-    out = coerce_arguments(
-        schema, {"events": '[{"type": "key", "pressed": "True"}]'}
-    )
+    out = coerce_arguments(schema, {"events": '[{"type": "key", "pressed": "True"}]'})
     assert out["events"] == [{"type": "key", "pressed": True}]
 
 
@@ -133,6 +131,52 @@ def test_schemaless_call_passes_through() -> None:
     args = {"a": '{"b": 1}'}
     assert coerce_arguments({}, args) == {"a": {"b": 1}}  # untyped top-level keys repaired
     assert coerce_arguments(None, args) == args  # no schema at all → untouched
+
+
+# --- schema-combinator coverage (review follow-up) ---------------------------
+
+
+def test_allof_flattened_before_recursing() -> None:
+    schema = {
+        "properties": {
+            "cfg": {
+                "allOf": [
+                    {"type": "object", "properties": {"speed": {"type": "number"}}},
+                    {"properties": {"label": {"type": "string"}}},
+                ]
+            }
+        }
+    }
+    out = coerce_arguments(schema, {"cfg": '{"speed": "3.5", "label": "7"}'})
+    assert out["cfg"] == {"speed": 3.5, "label": "7"}
+
+
+def test_anyof_non_string_branches_repair() -> None:
+    schema = {"properties": {"p": {"anyOf": [{"type": "array"}, {"type": "object"}]}}}
+    out = coerce_arguments(schema, {"p": '[{"q": "True"}]'})
+    assert out["p"] == [{"q": True}]
+
+
+def test_oneof_branch_selected_for_parsed_shape() -> None:
+    schema = {
+        "properties": {
+            "p": {
+                "oneOf": [
+                    {"type": "object", "properties": {"x": {"type": "boolean"}}},
+                    {"type": "integer"},
+                ]
+            }
+        }
+    }
+    out = coerce_arguments(schema, {"p": '{"x": "False"}'})
+    assert out["p"] == {"x": False}
+
+
+def test_string_branch_is_conservative_noop() -> None:
+    # anyOf([object, string]) declares a literal string as valid; never touch it.
+    schema = {"properties": {"p": {"anyOf": [{"type": "object"}, {"type": "string"}]}}}
+    out = coerce_arguments(schema, {"p": '{"a": "1"}'})
+    assert out["p"] == '{"a": "1"}'
 
 
 # --- evaluate_assertion scalar-string normalization --------------------------

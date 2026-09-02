@@ -159,8 +159,9 @@ def _coerce_string(val: str, schema: dict[str, Any] | None, root: dict[str, Any]
     if not schema and types:
         return val
     if types:
-        # Try object/array/bool/number branches against the parsed shape first,
-        # so an anyOf(["object", "string"]) param gets its JSON body repaired.
+        # A declared string branch returned above (a literal string is a valid
+        # value there and is never altered), so only object/array/bool/number
+        # declarations reach here: match the parsed shape against them.
         replaced, parsed = _parse_typed(val, types)
         if replaced:
             return _coerce_value(parsed, schema, root)
