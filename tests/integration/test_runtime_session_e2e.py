@@ -92,6 +92,30 @@ async def _run() -> None:
         assert tree["type"] == "Window"  # the game's root viewport
         child_types = [c["type"] for c in tree["children"]]
         assert "Node2D" in child_types  # our played scene root
+
+        # force_break must pause WITHOUT the game cooperating: this played scene
+        # has no script calling check_force_break(), so only the probe's own
+        # _process servicing (issue #392) can bring the debugger to a halt.
+        fb = await _ok(bridge, "cmd_force_break", {})
+        assert fb["force_break_sent"] is True
+        paused = False
+        for _ in range(30):
+            frames = await bridge.send("cmd_get_stack_frames", {"frame": 0})
+            if frames.ok:
+                paused = True
+                break
+            await asyncio.sleep(0.5)
+        assert paused, "force_break never paused a game without a cooperative _process"
+        resume = await _ok(bridge, "cmd_continue_execution", {})
+        assert resume.get("resumed") is not False
+        resumed = False
+        for _ in range(40):
+            still = await bridge.send("cmd_get_stack_frames", {"frame": 0})
+            if not still.ok:
+                resumed = True
+                break
+            await asyncio.sleep(0.25)
+        assert resumed, "debugger still reports paused after continue_execution"
         await _ok(bridge, "cmd_stop_scene", {})
     finally:
         await bridge.close()
