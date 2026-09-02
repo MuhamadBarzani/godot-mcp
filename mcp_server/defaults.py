@@ -18,6 +18,8 @@ DEFAULT_INPUT_RECORDING_TIMEOUT_MS: int = 2000
 DEFAULT_PERF_MONITORS_TIMEOUT_MS: int = 2000
 DEFAULT_RUNTIME_INSPECT_TIMEOUT_MS: int = 2000
 DEFAULT_ASSERT_NODE_TIMEOUT_MS: int = 1500
+# Viewport read-back waits one rendered editor frame; allow a few frames of slack.
+DEFAULT_CAPTURE_TIMEOUT_MS: int = 2000
 
 # -- Polling intervals ----------------------------------------------------------
 DEFAULT_POLL_INTERVAL_SECONDS: float = 0.1

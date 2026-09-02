@@ -8,6 +8,12 @@ extends RefCounted
 
 var _router: MCPCommandRouter
 
+# Two-phase capture state: the viewport read-back is deferred one rendered
+# frame (get_image() inline can stall the router on some display servers —
+# observed as a server-side timeout on macOS); callers poll until ready.
+var _shot: Dictionary = {}
+var _grab_queued := false
+
 
 
 func _encode_png(image: Image) -> Dictionary:
@@ -30,22 +36,37 @@ func register(handlers: Dictionary) -> void:
 # -- handlers ----------------------------------------------------------------
 
 func _cmd_capture_editor_screenshot(_params: Dictionary) -> Dictionary:
-	# Split the chain so any null intermediate returns a structured error, never crashes.
+	if not _shot.is_empty():
+		var done := _shot
+		_shot = {}
+		_grab_queued = false
+		return _router._ok(done)
 	var base_control := EditorInterface.get_base_control()
 	if base_control == null:
 		return _router._fail("INTERNAL_ERROR", "Editor base control is unavailable.")
+	var tree := base_control.get_tree()
+	if tree == null:
+		return _router._fail("INTERNAL_ERROR", "Editor scene tree is unavailable.")
+	if not _grab_queued:
+		tree.process_frame.connect(_grab_screenshot.bind(base_control), ConnectFlags.CONNECT_ONE_SHOT)
+		_grab_queued = true
+	return _router._ok({"ready": false})
+
+
+func _grab_screenshot(base_control: Control) -> void:
 	var viewport := base_control.get_viewport()
 	if viewport == null:
-		return _router._fail("INTERNAL_ERROR", "Editor viewport is unavailable.")
+		_shot = {"ready": true, "error": "Editor viewport is unavailable."}
+		return
 	var texture := viewport.get_texture()
 	if texture == null:
-		return _router._fail("INTERNAL_ERROR", "No viewport texture (no rendered frame; is a display available?).")
+		_shot = {"ready": true, "error": "No viewport texture (no rendered frame)."}
+		return
 	var image := texture.get_image()
-	if image == null:
-		return _router._fail("INTERNAL_ERROR", "Could not capture the editor viewport image.")
-	var result := _encode_png(image)
-	if str(result.get("base64", "")).is_empty():
-		return _router._fail("INTERNAL_ERROR", "PNG encoding produced no data.")
-	return _router._ok(result)
+	if image == null or image.is_empty():
+		_shot = {"ready": true, "error": "Could not capture the editor viewport image."}
+		return
+	_shot = _encode_png(image)
+	_shot["ready"] = true
 
 
