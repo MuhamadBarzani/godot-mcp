@@ -9,16 +9,19 @@ Gated ``asset_import`` toolset.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from pydantic import Field
 
 from mcp_server.bridge import Bridge
 from mcp_server.categories import ASSET_IMPORT_TAG
+from mcp_server.constraints import TimeoutMs
 from mcp_server.models.import_asset import (
     CreateMaterialResult,
     ImportAssetResult,
@@ -61,9 +64,7 @@ def _detect_type(path: str) -> str | None:
 
 def _require_res_path(path: str, field: str = "target_path") -> None:
     if not path.startswith("res://"):
-        raise ToolError(
-            f"VALIDATION_ERROR: '{field}' must start with 'res://' (got '{path}')."
-        )
+        raise ToolError(f"VALIDATION_ERROR: '{field}' must start with 'res://' (got '{path}').")
 
 
 def _is_url(source: str) -> bool:
@@ -80,15 +81,12 @@ async def _download_url(url: str) -> str:
         import httpx2 as httpx
     except ImportError as exc:
         raise ToolError(
-            "INTERNAL_ERROR: httpx2 is not installed. "
-            "Install it to enable URL download support."
+            "INTERNAL_ERROR: httpx2 is not installed. Install it to enable URL download support."
         ) from exc
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream(
-                "GET", url, follow_redirects=True
-            ) as response:
+            async with client.stream("GET", url, follow_redirects=True) as response:
                 response.raise_for_status()
                 suffix = Path(url.split("?")[0]).suffix or ".tmp"
                 fd, tmp_path = tempfile.mkstemp(suffix=suffix)
@@ -101,18 +99,39 @@ async def _download_url(url: str) -> str:
                     os.close(fd)
                     raise
     except httpx.HTTPStatusError as exc:
-        raise ToolError(
-            f"DOWNLOAD_FAILED: HTTP {exc.response.status_code} for '{url}'."
-        ) from exc
+        raise ToolError(f"DOWNLOAD_FAILED: HTTP {exc.response.status_code} for '{url}'.") from exc
     except httpx.RequestError as exc:
-        raise ToolError(
-            f"DOWNLOAD_FAILED: Network error downloading '{url}': {exc}."
-        ) from exc
+        raise ToolError(f"DOWNLOAD_FAILED: Network error downloading '{url}': {exc}.") from exc
 
 
 # ---------------------------------------------------------------------------
 # Public tool registration
 # ---------------------------------------------------------------------------
+
+# ``cmd_import_asset`` only kicks EditorFileSystem.scan() (async) on the addon
+# side; the .import sidecar lands a few frames later. Poll from the server —
+# a busy-wait in the handler would block the very main thread the scan needs.
+_SCAN_POLL_INTERVAL_S = 0.25
+_SCAN_TIMEOUT_MS_DEFAULT = 5000
+
+
+async def _poll_import_ready(
+    bridge: Bridge, target_path: str, timeout_ms: int
+) -> dict[str, Any] | None:
+    """Poll ``cmd_get_import_status`` until the sidecar exists or time is up.
+
+    Returns the ready status result, or ``None`` if the budget expired first.
+    Transient command failures are treated as not-ready (retried until deadline).
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_ms / 1000.0
+    while True:
+        response = await bridge.send("cmd_get_import_status", {"target_path": target_path})
+        if response.ok and (response.result or {}).get("imported"):
+            return dict(response.result or {})
+        if loop.time() >= deadline:
+            return None
+        await asyncio.sleep(_SCAN_POLL_INTERVAL_S)
 
 
 def register_import_asset(mcp: FastMCP, bridge: Bridge) -> None:
@@ -124,6 +143,8 @@ def register_import_asset(mcp: FastMCP, bridge: Bridge) -> None:
         target_path: str,
         options: dict[str, Any] | None = None,
         dry_run: bool = False,
+        wait_for_scan: bool = False,
+        timeout_ms: TimeoutMs = _SCAN_TIMEOUT_MS_DEFAULT,
     ) -> ImportAssetResult:
         """Bring an external file into the Godot project.
 
@@ -135,6 +156,11 @@ def register_import_asset(mcp: FastMCP, bridge: Bridge) -> None:
         - ``overwrite`` (bool, default ``False``)
         - ``import_settings`` (dict, type-specific — e.g.
           ``{"type": "Texture2D", "compress": "lossy"}``)
+
+        ``wait_for_scan`` (default ``False``): after copying, poll the import
+        status until the editor's async scan has produced the ``.import``
+        sidecar (up to ``timeout_ms``); ``scan_complete`` in the result reports
+        whether the import artifacts are ready (vs just the copy landing).
         """
         _require_res_path(target_path)
         options = options or {}
@@ -166,11 +192,15 @@ def register_import_asset(mcp: FastMCP, bridge: Bridge) -> None:
         finally:
             if downloaded_tmp and os.path.exists(downloaded_tmp):
                 os.unlink(downloaded_tmp)
+        scan_complete = False
+        if wait_for_scan and result.get("imported", True):
+            scan_complete = await _poll_import_ready(bridge, target_path, timeout_ms) is not None
         return ImportAssetResult(
             imported=result.get("imported", True),
             target_path=result.get("target_path", target_path),
             detected_type=result.get("detected_type") or detected_type,
             dry_run=False,
+            scan_complete=scan_complete,
         )
 
     @mcp.tool(meta=MUTATING, tags=ASSET_IMPORT)
@@ -214,14 +244,24 @@ def register_import_asset(mcp: FastMCP, bridge: Bridge) -> None:
         )
 
     @mcp.tool(meta=READ_ONLY, tags=ASSET_IMPORT)
-    async def get_import_status(target_path: str) -> ImportStatusResult:
+    async def get_import_status(
+        target_path: str, wait_ms: Annotated[int, Field(ge=0, le=600_000)] = 0
+    ) -> ImportStatusResult:
         """Check whether ``target_path`` has been imported by the Godot editor.
 
         Looks in ``.godot/imported/`` for the corresponding import file and
         returns the detected type and last-modified time.
+
+        ``wait_ms`` (default 0): if not yet imported, keep polling for that
+        many milliseconds first — useful right after ``import_asset``, whose
+        editor-side scan is asynchronous.
         """
         _require_res_path(target_path)
         result = await route(bridge, "cmd_get_import_status", {"target_path": target_path})
+        if not result.get("imported", False) and wait_ms > 0:
+            polled = await _poll_import_ready(bridge, target_path, wait_ms)
+            if polled is not None:
+                result = polled
         return ImportStatusResult(
             imported=result.get("imported", False),
             last_modified=result.get("last_modified"),

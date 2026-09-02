@@ -10,6 +10,7 @@ class ImportAssetResult(BaseModel):
     target_path: str
     detected_type: str | None = None
     dry_run: bool = False
+    scan_complete: bool = False
 
 
 class CreateMaterialResult(BaseModel):

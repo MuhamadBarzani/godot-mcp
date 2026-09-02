@@ -193,3 +193,112 @@ async def test_get_import_status_is_read_only() -> None:
             t for t in await client.list_tools() if t.name == "godot_asset_import_get_status"
         )
     assert tool.meta is not None and tool.meta.get("safety_class") == "read_only"
+
+
+# --- wait-for-scan support (issue #400) --------------------------------------
+
+
+def _build_with(
+    responder,
+) -> tuple[FastMCP, FakeAddonConnection]:
+    conn = FakeAddonConnection(responder=responder)
+    bridge = Bridge(ServerConfig().bridge, connector=connector_for(conn))
+    return create_server(ServerConfig(), bridge=bridge), conn
+
+
+def _status_response(cmd: CommandEnvelope, ready: bool) -> ResponseEnvelope:
+    return ResponseEnvelope.success(
+        cmd.id,
+        {
+            "imported": ready,
+            "last_modified": "2026-06-09T12:00:00Z" if ready else None,
+            "type": "Texture2D" if ready else None,
+        },
+    )
+
+
+async def test_import_asset_wait_for_scan_polls_until_ready() -> None:
+    status_calls = {"n": 0}
+
+    def responder(cmd: CommandEnvelope) -> ResponseEnvelope:
+        if cmd.command == "cmd_import_asset":
+            return _responder(cmd)
+        if cmd.command == "cmd_get_import_status":
+            status_calls["n"] += 1
+            return _status_response(cmd, ready=status_calls["n"] >= 3)
+        return ResponseEnvelope.failure(cmd.id, "VALIDATION_ERROR", "unexpected")
+
+    server, _ = _build_with(responder)
+    async with Client(server) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "asset_import"})
+        result = await client.call_tool(
+            "godot_asset_import_asset",
+            {
+                "source": "res://temp/x.png",
+                "target_path": "res://assets/x.png",
+                "wait_for_scan": True,
+            },
+        )
+    assert result.structured_content["imported"] is True
+    assert result.structured_content["scan_complete"] is True
+    assert status_calls["n"] == 3
+
+
+async def test_import_asset_wait_for_scan_timeout_reports_incomplete() -> None:
+    status_calls = {"n": 0}
+
+    def responder(cmd: CommandEnvelope) -> ResponseEnvelope:
+        if cmd.command == "cmd_import_asset":
+            return _responder(cmd)
+        if cmd.command == "cmd_get_import_status":
+            status_calls["n"] += 1
+            return _status_response(cmd, ready=False)
+        return ResponseEnvelope.failure(cmd.id, "VALIDATION_ERROR", "unexpected")
+
+    server, _ = _build_with(responder)
+    async with Client(server) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "asset_import"})
+        result = await client.call_tool(
+            "godot_asset_import_asset",
+            {
+                "source": "res://temp/x.png",
+                "target_path": "res://assets/x.png",
+                "wait_for_scan": True,
+                "timeout_ms": 400,
+            },
+        )
+    assert result.structured_content["imported"] is True
+    assert result.structured_content["scan_complete"] is False
+    assert status_calls["n"] >= 1
+
+
+async def test_import_asset_without_wait_does_not_poll() -> None:
+    server, conn = _build()
+    async with Client(server) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "asset_import"})
+        result = await client.call_tool(
+            "godot_asset_import_asset",
+            {"source": "res://temp/x.png", "target_path": "res://assets/x.png"},
+        )
+    assert result.structured_content["scan_complete"] is False
+    assert "cmd_get_import_status" not in _commands(conn)
+
+
+async def test_get_import_status_wait_ms_polls_until_ready() -> None:
+    status_calls = {"n": 0}
+
+    def responder(cmd: CommandEnvelope) -> ResponseEnvelope:
+        if cmd.command == "cmd_get_import_status":
+            status_calls["n"] += 1
+            return _status_response(cmd, ready=status_calls["n"] >= 2)
+        return _responder(cmd)
+
+    server, _ = _build_with(responder)
+    async with Client(server) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "asset_import"})
+        result = await client.call_tool(
+            "godot_asset_import_get_status",
+            {"target_path": "res://assets/x.png", "wait_ms": 1500},
+        )
+    assert result.structured_content["imported"] is True
+    assert status_calls["n"] == 2
