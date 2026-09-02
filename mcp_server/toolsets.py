@@ -13,6 +13,7 @@ added in later releases (e.g. ``input_map`` needs Godot 4.4+).
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -135,7 +136,18 @@ TOOLSET_MIN_GODOT: dict[str, tuple[int, int]] = {
 
 # Enabled at startup (plus `core`, which is always on). Everything else is gated
 # off until the agent enables it — keeping the default surface small and read-only.
-DEFAULT_ENABLED: frozenset[str] = frozenset({INSPECTION_TAG})
+# Override with GODOT_MCP_DEFAULT_TOOLSETS: comma-separated categories, or "all"
+# to expose the full catalog at startup.
+def _default_enabled_from_env() -> frozenset[str]:
+    raw = os.environ.get("GODOT_MCP_DEFAULT_TOOLSETS", "").strip()
+    if raw.lower() == "all":
+        return frozenset(TOOLSETS)
+    wanted = {t.strip() for t in raw.split(",") if t.strip()}
+    valid = wanted & set(TOOLSETS)
+    return frozenset(valid) if valid else frozenset({INSPECTION_TAG})
+
+
+DEFAULT_ENABLED: frozenset[str] = _default_enabled_from_env()
 
 
 class ToolsetInfo(BaseModel):
