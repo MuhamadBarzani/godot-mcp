@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from mcp_server.toolsets import TOOLSET_MIN_GODOT, TOOLSETS, _parse_godot_version
+from mcp_server.toolsets import (
+    INSPECTION_TAG,
+    TOOLSET_MIN_GODOT,
+    TOOLSETS,
+    _default_enabled_from_env,
+    _parse_godot_version,
+)
 
 
 @pytest.mark.parametrize(
@@ -40,3 +46,36 @@ def test_toolset_min_godot_tuple_ordering() -> None:
     assert (3, 5) < (4, 4)
     assert (4, 4) == (4, 4)
     assert not ((4, 4) < (4, 4))
+
+
+# --- GODOT_MCP_DEFAULT_TOOLSETS startup seeding (issue #393) -----------------
+
+
+def test_default_env_unset_falls_back_to_inspection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GODOT_MCP_DEFAULT_TOOLSETS", raising=False)
+    assert _default_enabled_from_env() == frozenset({INSPECTION_TAG})
+
+
+def test_default_env_all_enables_everything(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GODOT_MCP_DEFAULT_TOOLSETS", "all")
+    assert _default_enabled_from_env() == frozenset(TOOLSETS)
+
+
+def test_default_env_all_is_case_insensitive(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GODOT_MCP_DEFAULT_TOOLSETS", " ALL ")
+    assert _default_enabled_from_env() == frozenset(TOOLSETS)
+
+
+def test_default_env_comma_list_selects_categories(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GODOT_MCP_DEFAULT_TOOLSETS", "scene_edit, batch")
+    assert _default_enabled_from_env() == frozenset({"scene_edit", "batch"})
+
+
+def test_default_env_invalid_names_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GODOT_MCP_DEFAULT_TOOLSETS", "scene_edit,not-a-toolset")
+    assert _default_enabled_from_env() == frozenset({"scene_edit"})
+
+
+def test_default_env_all_invalid_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GODOT_MCP_DEFAULT_TOOLSETS", "bogus")
+    assert _default_enabled_from_env() == frozenset({INSPECTION_TAG})
