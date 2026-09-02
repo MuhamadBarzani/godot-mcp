@@ -69,3 +69,41 @@ async def test_capture_returns_image_content() -> None:
     assert block.mime_type == "image/png"
     # The returned data decodes to the same PNG bytes the addon supplied.
     assert base64.b64decode(block.data).startswith(b"\x89PNG\r\n\x1a\n")
+
+
+async def test_deferred_capture_polls_until_ready() -> None:
+    """Two-phase addon (grab pending → done): the tool polls and still returns the image."""
+    calls = {"n": 0}
+
+    def responder(cmd: CommandEnvelope) -> ResponseEnvelope:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return ResponseEnvelope.success(cmd.id, {"ready": False})
+        return ResponseEnvelope.success(
+            cmd.id,
+            {"ready": True, "format": "png", "width": 1, "height": 1, "base64": _PNG_B64},
+        )
+
+    conn = FakeAddonConnection(responder=responder)
+    bridge = Bridge(ServerConfig().bridge, connector=connector_for(conn))
+    async with Client(create_server(ServerConfig(), bridge=bridge)) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "editor"})
+        result = await client.call_tool("godot_editor_capture_screenshot", {"timeout_ms": 2000})
+    assert calls["n"] >= 2
+    image_blocks = [b for b in result.content if type(b).__name__ == "ImageContent"]
+    assert image_blocks, f"expected an image content block, got {result.content}"
+
+
+async def test_capture_never_ready_times_out_with_actionable_error() -> None:
+    def responder(cmd: CommandEnvelope) -> ResponseEnvelope:
+        return ResponseEnvelope.success(cmd.id, {"ready": False})
+
+    conn = FakeAddonConnection(responder=responder)
+    bridge = Bridge(ServerConfig().bridge, connector=connector_for(conn))
+    async with Client(create_server(ServerConfig(), bridge=bridge)) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "editor"})
+        result = await client.call_tool(
+            "godot_editor_capture_screenshot", {"timeout_ms": 250}, raise_on_error=False
+        )
+    assert result.is_error
+    assert "did not complete" in str(result.content)

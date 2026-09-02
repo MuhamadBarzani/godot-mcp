@@ -391,7 +391,7 @@ undoable in the editor.
 
 | Tool | Params | Returns | Class |
 |------|--------|---------|-------|
-| `godot_editor_capture_screenshot` | — | image content (PNG) | `read_only` |
+| `godot_editor_capture_screenshot` | `timeout_ms?` | image content (PNG) | `read_only` |
 
 The addon captures the editor viewport and returns a base64 PNG; the tool decodes it
 into a FastMCP `Image` so a vision-capable client receives an image block (no temp
