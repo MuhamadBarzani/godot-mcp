@@ -284,6 +284,25 @@ async def test_import_asset_without_wait_does_not_poll() -> None:
     assert "cmd_get_import_status" not in _commands(conn)
 
 
+async def test_dry_run_with_wait_for_scan_never_polls() -> None:
+    """dry_run returns the preview before the bridge (and any polling) is touched."""
+    server, conn = _build()
+    async with Client(server) as client:
+        await client.call_tool("godot_enable_toolset", {"category": "asset_import"})
+        result = await client.call_tool(
+            "godot_asset_import_asset",
+            {
+                "source": "res://temp/x.png",
+                "target_path": "res://assets/x.png",
+                "dry_run": True,
+                "wait_for_scan": True,
+            },
+        )
+    assert result.structured_content["dry_run"] is True
+    assert result.structured_content["scan_complete"] is False
+    assert _commands(conn) == []  # nothing sent: no import, no status polling
+
+
 async def test_get_import_status_wait_ms_polls_until_ready() -> None:
     status_calls = {"n": 0}
 
