@@ -4,8 +4,10 @@ A large flat tool surface degrades agent tool-selection and burns context, so we
 keep the *live* surface small. Every tool carries a category tag; `core` is always
 on; other categories ship gated off and the agent turns them on with
 `enable_toolset`. As the catalog grows toward full Godot coverage, the exposed set
-stays small. Built on FastMCP's tag-based `enable`/`disable` (which emit
-`tools/list_changed`).
+stays small. Built on FastMCP's tag-based `enable`/`disable`. After mutating the
+enabled set, ``enable_toolset`` / ``disable_toolset`` emit a
+``notifications/tools/list_changed`` so clients refresh their cached tool registry
+(issue #485).
 
 Some toolsets require a minimum Godot version because they rely on editor APIs
 added in later releases (e.g. ``input_map`` needs Godot 4.4+).
@@ -19,6 +21,7 @@ from typing import Any
 
 from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
+from mcp_types import ToolListChangedNotification
 from pydantic import BaseModel
 
 from mcp_server.bridge import Bridge
@@ -311,9 +314,25 @@ def register_toolset_tools(mcp: FastMCP, manager: ToolsetManager) -> None:
         """Expose a toolset's tools (e.g. "scene_edit") for this session. Returns the
         toolset's new state. Does not change anything in the Godot project.
         """
-        return await manager.enable(category, ctx=ctx)
+        result = await manager.enable(category, ctx=ctx)
+        # Notify clients so they refresh their cached tool registry.
+        # This is correct per the MCP spec, but note: OpenCode has a known bug
+        # (https://github.com/anomalyco/opencode/issues/48196) where local MCP
+        # servers silently fail to register tools — the client drops them during
+        # handshake. This notification won't help until that upstream issue is
+        # fixed. The code is here so it works the moment OpenCode lands a fix.
+        try:
+            await ctx.send_notification(ToolListChangedNotification())
+        except Exception:
+            pass
+        return result
 
     @mcp.tool(meta=READ_ONLY, tags={CORE_TAG})
     async def disable_toolset(category: str, *, ctx: Context) -> ToolsetInfo:
         """Hide a toolset's tools again to keep the active tool surface small."""
-        return await manager.disable(category, ctx=ctx)
+        result = await manager.disable(category, ctx=ctx)
+        try:
+            await ctx.send_notification(ToolListChangedNotification())
+        except Exception:
+            pass
+        return result
