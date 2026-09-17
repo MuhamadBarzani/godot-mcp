@@ -15,6 +15,7 @@ added in later releases (e.g. ``input_map`` needs Godot 4.4+).
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
@@ -58,6 +59,8 @@ from mcp_server.categories import (
 )
 from mcp_server.safety import READ_ONLY
 from mcp_server.toolset_middleware import ToolsetMiddleware
+
+logger = logging.getLogger(__name__)
 
 # Toggleable toolsets (category → agent-facing description). `core` is not here.
 TOOLSETS: dict[str, str] = {
@@ -315,24 +318,33 @@ def register_toolset_tools(mcp: FastMCP, manager: ToolsetManager) -> None:
         toolset's new state. Does not change anything in the Godot project.
         """
         result = await manager.enable(category, ctx=ctx)
-        # Notify clients so they refresh their cached tool registry.
-        # This is correct per the MCP spec, but note: OpenCode has a known bug
-        # (https://github.com/anomalyco/opencode/issues/48196) where local MCP
-        # servers silently fail to register tools — the client drops them during
-        # handshake. This notification won't help until that upstream issue is
-        # fixed. The code is here so it works the moment OpenCode lands a fix.
-        try:
-            await ctx.send_notification(ToolListChangedNotification())
-        except Exception:
-            pass
+        await _notify_tools_changed(ctx)
         return result
 
     @mcp.tool(meta=READ_ONLY, tags={CORE_TAG})
     async def disable_toolset(category: str, *, ctx: Context) -> ToolsetInfo:
         """Hide a toolset's tools again to keep the active tool surface small."""
         result = await manager.disable(category, ctx=ctx)
-        try:
-            await ctx.send_notification(ToolListChangedNotification())
-        except Exception:
-            pass
+        await _notify_tools_changed(ctx)
         return result
+
+
+async def _notify_tools_changed(ctx: Context) -> None:
+    """Emit ``notifications/tools/list_changed`` after the enabled set changes so
+    clients refresh their cached tool registry (issue #485).
+
+    Fire-and-forget by design: the toggle already succeeded, so a delivery
+    failure must not fail the tool call — but it is logged, never swallowed
+    silently. Note: OpenCode has a known bug
+    (https://github.com/anomalyco/opencode/issues/48196) where local MCP servers
+    silently fail to register tools during handshake; this notification helps
+    the moment that upstream issue is fixed.
+    """
+    try:
+        await ctx.send_notification(ToolListChangedNotification())
+    except Exception:
+        logger.warning(
+            "tools/list_changed notification failed to send "
+            "(client may have disconnected); toolset toggle already applied",
+            exc_info=True,
+        )

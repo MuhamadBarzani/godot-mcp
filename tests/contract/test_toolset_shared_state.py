@@ -120,11 +120,18 @@ class _ToolListChangedRecorder(MessageHandler):
 
     def __init__(self) -> None:
         self.count = 0
+        self.received = asyncio.Event()
 
     async def on_tool_list_changed(
         self, message: mcp_types.ToolListChangedNotification
     ) -> None:
         self.count += 1
+        self.received.set()
+
+
+async def _wait_for(handler: _ToolListChangedRecorder, timeout: float = 5.0) -> None:
+    """Wait deterministically for the notification event (no sleep-waits)."""
+    await asyncio.wait_for(handler.received.wait(), timeout=timeout)
 
 
 async def test_enable_toolset_sends_list_changed_notification() -> None:
@@ -134,8 +141,7 @@ async def test_enable_toolset_sends_list_changed_notification() -> None:
     async with Client(server, mode="legacy", message_handler=handler) as client:
         assert handler.count == 0
         await client.call_tool("godot_enable_toolset", {"category": "scene_edit"})
-        # The notification may be delivered asynchronously; yield to let it arrive.
-        await asyncio.sleep(0.05)
+        await _wait_for(handler)
     assert handler.count >= 1
 
 
@@ -145,7 +151,10 @@ async def test_disable_toolset_sends_list_changed_notification() -> None:
     handler = _ToolListChangedRecorder()
     async with Client(server, mode="legacy", message_handler=handler) as client:
         await client.call_tool("godot_enable_toolset", {"category": "scene_edit"})
+        await _wait_for(handler)
         handler.count = 0  # reset after enable
+        handler.received.clear()
         await client.call_tool("godot_disable_toolset", {"category": "scene_edit"})
-        await asyncio.sleep(0.05)
+        await _wait_for(handler)
     assert handler.count >= 1
+
